@@ -1,5 +1,46 @@
 # FastAPI示例框架
 
+[![Python](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/release/python-3120/)
+[![FastAPI](https://img.shields.io/badge/fastapi-%E2%89%A50.115-green.svg)](https://fastapi.tiangolo.com/)
+[![Pydantic](https://img.shields.io/badge/pydantic-v2-orange.svg)](https://docs.pydantic.dev/)
+
+> **2.0.0 重大重构（2026-05）**：升级到 Python 3.12，全栈依赖迁移到当前主版本。详见 [CHANGELOG.md](./CHANGELOG.md)。
+> 老代码仍部署在 Python 3.9 的，请保留 `1.x` 分支或回退 commit。
+
+## 0 快速上手
+
+```powershell
+# 1. 创建并激活 3.12 虚拟环境
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+
+# 2. 安装依赖（含开发工具：aerich/ruff/pytest）
+pip install -e ".[dev]"
+
+# 3. 修改 project_env 中的数据库地址 / 账号 / 密码
+
+# 4. 启动（typer 命令）
+python main.py run            # 默认监听 0.0.0.0:8080
+python main.py run --reload   # 开发热重载
+```
+
+启动后访问：
+- Swagger UI: `http://127.0.0.1:8080/api/sample/docs`
+- ReDoc: `http://127.0.0.1:8080/api/sample/redoc`
+- 健康检查: `http://127.0.0.1:8080/api/sample/check`
+
+### 主要技术栈（2.0.0）
+
+| 领域 | 选型 | 关键变化 |
+|---|---|---|
+| 运行时 | **Python 3.12** | `asyncio.timeout`、`tomllib` 内置 |
+| Web 框架 | FastAPI ≥ 0.115 | `lifespan` 取代 `@app.on_event` |
+| 序列化 | **Pydantic v2** + pydantic-settings | `@field_validator` / `model_config` / `.model_dump()` |
+| ORM | tortoise-orm[asyncmy] ≥ 0.21 | `aiomysql` → `asyncmy`（3.12 兼容） |
+| Redis | **redis ≥ 5.1（`redis.asyncio`）** | drop `aioredis 2.x` |
+| Kafka | aiokafka ≥ 0.11 | — |
+| 调度 | apscheduler ≥ 3.10 | 单一 `AsyncIOScheduler`，由 lifespan 管理 |
+
 ## 1 项目结构
 
 本项目目录结构如下，其中`*`标为目录，以下出现的目录为项目必须文件，不允许添加git忽略：
@@ -58,49 +99,34 @@
 ```
 └── src *
     ├── __init__.py
-    ├── application.py
-    ├── settings.py
+    ├── application.py        # Typer CLI 入口
+    ├── settings.py           # pydantic-settings 配置层
     ├── version.py
-    ├── faster *
-    │   ├── __init__.py
-    │   ├── apps.py
-    │   ├── events.py
-    │   ├── exceptions.py
-    │   ├── middlewares.py
-    │   └── routers *
-    ├── my_tools *
-    │   ├── __init__.py
-    │   ├── password_tools.py
-    │   ├── regex_tools.py
-    │   ├── singleton_tools.py
-    │   ├── fastapi_tools *
-    │   └── tortoise_tools *
-    └── my_apps *
+    ├── faster *              # FastAPI 应用
+    │   ├── __init__.py
+    │   ├── apps.py           # FastAPI 实例（含 lifespan）
+    │   ├── events.py         # lifespan 上下文
+    │   ├── middlewares.py
+    │   └── routers *         # 业务路由（users / resource）
+    └── my_tools *
+        ├── singleton_tools.py
+        ├── password_tool.py
+        ├── regex_tool.py
+        ├── fastapi_tools/    # CBV 装饰器与视图集
+        ├── tortoise_tools/   # Tortoise 自定义字段、验证器
+        ├── redis_tools/      # redis.asyncio 客户端（含哨兵）
+        ├── kafka_tools/      # aiokafka 客户端
+        ├── mqtt_tools/       # 占位待用
+        └── schedule_tasks/   # 定时任务函数
 ```
 
-- application.py: Typer的终端应用程序文件，用于启动FastAPI的服务。
-
-- settings.py: 项目运行的配置文件。
-
-- faster: FastAPI项目目录。
-
-  - apps.py: FastAPI的实例文件。
-  - events.py: FastAPI的startup与shutdown事件回调函数文件。
-  - exceptions.py: FastAPI的异常回调函数文件。
-  - middlewares.py: FastAPI的中间件文件。
-  - routers: FastAPI所有的子路由目录
-    - models.py: 数据库的orm模型文件。
-    - routers.py: 视图函数文件。
-    - schemas.py: 视图函数接收和响应数据的序列化schema类文件。
-    - validators: 数据库orm模型字段的验证器文件。
-
-- my_tools: 工具包目录
-
-  - singleton_tools.py: 单例模式工具
-  - fastapi_tools: FastAPI的CBV工具
-  - tortoise_tools: Tortoise一些扩展工具
-
-- my_apps：其他服务
+- **application.py**：Typer 命令行入口，支持 `--host/--port/--reload`。
+- **settings.py**：基于 `pydantic-settings` 加载 `project_env` + `pyproject.toml.[myproject]`，环境变量优先。
+- **faster.apps**：FastAPI 实例，通过 `lifespan=lifespan` 注册生命周期。
+- **faster.events**：`@asynccontextmanager`，启动时按序初始化 Tortoise → Redis → Scheduler，关闭时反序释放；资源挂在 `app.state` 上，路由通过 `request.app.state.redis` 取用。
+- **faster.routers**：业务路由按子目录划分，每个子目录包含 `models.py`（ORM）、`schemas.py`（Pydantic v2 序列化）、`routers.py`（视图）。
+- **my_tools.fastapi_tools**：CBV 工具，`Action.get/post/...` 装饰器附加路由元数据，`BaseViewSet` 元类自动注册到 `APIRouter`。
+- **my_tools.redis_tools / kafka_tools**：客户端均抽出 `_Base*Client` 公共生命周期基类，统一重连状态机。
 
   
 
@@ -368,22 +394,18 @@ Success downgrade 1_20211126094013_user.sql
 `build_dockerfile`为用于打包编译镜像的dockerfile文件，内容如下：
 
 ```dockerfile
-# 以 debian:buster-slim系统为基础镜像  buster代表debian10  slim代表最简镜像
-FROM debian:buster-slim
-# 修改 Linux默认的"LANG=C" 为 "UTF-8"，因为python默认编码为 utf-8
-ENV LANG C.UTF-8
-# 复制 Linux下的编译文件目录到 /MyProject目录下
-COPY ./build/exe.linux-x86_64-3.8 /MyProject
-# 设置镜像的工作目录为 /MyProject
+# 2.0.0：debian:bookworm-slim（debian 12），python 3.12 编译产物
+FROM debian:bookworm-slim
+ENV LANG=C.UTF-8
+
+COPY ./build/exe.linux-x86_64-3.12 /MyProject
 WORKDIR /MyProject
 
-# 配置apt源并安装vim
-RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list \
-    && sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list \
+RUN sed -i 's@deb.debian.org@mirrors.aliyun.com@g; s@security.debian.org@mirrors.aliyun.com@g' /etc/apt/sources.list.d/debian.sources \
     && apt-get update \
-    && apt-get install -y vim
+    && apt-get install -y --no-install-recommends vim \
+    && rm -rf /var/lib/apt/lists/*
 
-# 指定docker镜像启动的默认执行命令
 CMD ["./main"]
 ```
 
@@ -392,25 +414,22 @@ CMD ["./main"]
 `python_dockerfile`为打包源码镜像的文件，与打包编译镜像不同，由于源码的运行需要python环境，所以打包源码镜像时要在镜像里初始化一个项目运行的python环境：
 
 ```dockerfile
-# 以 python:3.8-slim-buster 镜像为基础环境，包含一个debian系统与 python 3.8.12 环境
-FROM python:3.8-slim-buster
-ENV LANG C.UTF-8
-# 复制项目源码到 /MyProject目录，并设置工作目录
-COPY . /MyProject
+# 2.0.0：python:3.12-slim-bookworm
+FROM python:3.12-slim-bookworm
+ENV LANG=C.UTF-8 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
 WORKDIR /MyProject
-# 为 debian的 apt程序切换 aliyun的源， 然后安装vim
-RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list \
-    && sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list \
+COPY . /MyProject
+
+RUN sed -i 's@deb.debian.org@mirrors.aliyun.com@g; s@security.debian.org@mirrors.aliyun.com@g' /etc/apt/sources.list.d/debian.sources \
     && apt-get update \
-    && apt-get install -y vim
+    && apt-get install -y --no-install-recommends vim \
+    && rm -rf /var/lib/apt/lists/*
 
-#RUN pip install --no-cache-dir --upgrade pip setuptools -i https://mirrors.aliyun.com/pypi/simple/
-# 安装 python的依赖包，安装完成后删除 ~/.cache目录，降低镜像大小
-RUN pip install --no-cache-dir -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/ \
-    && rm -rf ~/.cache
+RUN pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
 
-# 设置镜像启动命令，在shell中使用空格分割的命令，在dockerfile中应使用字符串数组进行表示
-# 例如: "python main.py --name hello" -> ["python","main.py","--name","hello"]
-CMD ["python","main.py"]
+CMD ["python", "main.py", "run"]
 ```
 
