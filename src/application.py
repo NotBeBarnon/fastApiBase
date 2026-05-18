@@ -1,25 +1,26 @@
 # -*- coding: utf-8 -*-
-# @Time    : 2022/3/2:14:05
-# @Author  : fzx
-# @Description :
+# @Description : Typer 命令行入口
+from __future__ import annotations
 
 import typer
-
 
 Application = typer.Typer()
 
 
 @Application.command()
-def run():
+def run(
+    host: str | None = None,
+    port: int | None = None,
+    reload: bool = False,
+) -> None:
     import uvicorn
-    from .settings import HTTP_API_LISTEN_HOST, HTTP_API_LISTEN_PORT
+
     from .faster import fast_app
+    from .settings import HTTP_API_LISTEN_HOST, HTTP_API_LISTEN_PORT
 
     uvicorn.run(
         fast_app,
-        host=HTTP_API_LISTEN_HOST,
-        port=HTTP_API_LISTEN_PORT,
-        reload=False,
+        host=host or HTTP_API_LISTEN_HOST,
+        port=port or HTTP_API_LISTEN_PORT,
+        reload=reload,
     )
-
-

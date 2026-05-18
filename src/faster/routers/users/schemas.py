@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
-# @Time    : 2022/3/2:16:52
-# @Author  : fzx
-# @Description :
+from __future__ import annotations
 
-from pydantic import Field, validator
+from pydantic import ConfigDict, Field, field_validator
 from tortoise.contrib.pydantic import pydantic_model_creator
 
 from .models import User
@@ -11,37 +9,41 @@ from .models import User
 UserSchema = pydantic_model_creator(User, name="UserSchema", exclude=("password",))
 
 
-class UserCreateSchema(pydantic_model_creator(User, name="UserCreateSchema", exclude=("uid",), exclude_readonly=True)):
+class UserCreateSchema(
+    pydantic_model_creator(User, name="UserCreateSchema", exclude=("uid",), exclude_readonly=True)
+):
+    model_config = ConfigDict(title="UserCreateSchema")
+
     password_again: str = Field(..., description="重复输入验证密码")
 
-    @validator("password_again")
-    def password_again_validator(cls, password_again, values, **kwargs):
-        if password_again != values["password"]:
+    @field_validator("password_again")
+    @classmethod
+    def password_again_validator(cls, password_again: str, info) -> str:
+        if password_again != info.data.get("password"):
             raise ValueError("两次密码不一致")
         return password_again
 
-    class Config:
-        title = "UserCreateSchema"
 
+class UserUpdateSchema(
+    pydantic_model_creator(User, name="UserUpdateSchema", exclude=("uid",), exclude_readonly=True)
+):
+    model_config = ConfigDict(title="UserUpdateSchema")
 
-class UserUpdateSchema(pydantic_model_creator(User, name="UserUpdateSchema", exclude=("uid",), exclude_readonly=True)):
-    username: str = None
-    # name: Optional[str] = Field(None, description="用户名字")
-    # family_name: Optional[str] = Field(None, description="用户姓")
-    password: str = None
-    password_again: str = Field(None, description="再次验证密码")
+    username: str | None = None
+    password: str | None = None
+    password_again: str | None = Field(None, description="再次验证密码")
 
-    @validator("password")
-    def password_validator(cls, password, values, **kwargs):
-        if not password:
+    @field_validator("password")
+    @classmethod
+    def password_validator(cls, password: str | None) -> str | None:
+        if password is not None and not password:
             raise ValueError("密码不可设置为空")
         return password
 
-    @validator("password_again", always=True)
-    def password_again_validator(cls, password_again, values, **kwargs):
-        if "password" in values and password_again != values["password"]:
+    @field_validator("password_again")
+    @classmethod
+    def password_again_validator(cls, password_again: str | None, info) -> str | None:
+        pwd = info.data.get("password")
+        if pwd is not None and password_again != pwd:
             raise ValueError("密码不一致")
         return password_again
-
-    class Config:
-        title = "UserUpdateSchema"

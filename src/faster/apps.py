@@ -1,19 +1,16 @@
 # -*- coding: utf-8 -*-
-# @Time    : 2022/3/2:14:15
-# @Author  : fzx
-# @Description : FastAPI的app
+# @Description : FastAPI 应用实例
+from __future__ import annotations
 
 from fastapi import FastAPI
 
-from .routers import all_router
-from ..my_tools.object_manager_tools import global_om
-from ..my_tools.redis_tools.clients import RedisSentinelClient
-from ..settings import HTTP_BASE_URL, REDIS_CONFIG
+from ..settings import HTTP_BASE_URL
 from ..version import VERSION
+from .events import lifespan
+from .routers import all_router
 
-__all__ = (
-    "fast_app",
-)
+__all__ = ("fast_app",)
+
 
 fast_app = FastAPI(
     title="FastSample",
@@ -22,16 +19,7 @@ fast_app = FastAPI(
     openapi_url=f"{HTTP_BASE_URL}/openapi.json",
     docs_url=f"{HTTP_BASE_URL}/docs",
     redoc_url=f"{HTTP_BASE_URL}/redoc",
+    lifespan=lifespan,
 )
-
-redis_client_ = RedisSentinelClient(
-    sentinels=REDIS_CONFIG["sentinels"]["service"],
-    service_name=REDIS_CONFIG["sentinels"]["service_name"],
-    db=REDIS_CONFIG["db"],
-    user=REDIS_CONFIG["user"],
-    password=REDIS_CONFIG["password"],
-    retry_interval=REDIS_CONFIG["retry_interval"],
-)
-global_om.register("redis_client", redis_client_)
 
 fast_app.include_router(all_router)

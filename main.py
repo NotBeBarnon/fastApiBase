@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
-# @Time    : 2022/3/2
-# @Author  : fzx
-# @Description : 启动入口
-
+# @Description : 程序入口
+from __future__ import annotations
 
 if __name__ == "__main__":
     from src.application import Application

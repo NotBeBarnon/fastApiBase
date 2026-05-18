@@ -1,13 +1,9 @@
 # -*- coding: utf-8 -*-
-# @Time    : 2022/3/3 14:37
-# @Author  : fzx
-# @Description :
+# @Description : 密码工具（MD5，仅作示例 — 生产环境建议使用 argon2/bcrypt）
+from __future__ import annotations
+
 import hashlib
 
 
-def make_password(password: str):
-    return hashlib.md5(password.encode(encoding="ascii")).hexdigest()
-
-
-if __name__ == '__main__':
-    pass
+def make_password(password: str) -> str:
+    return hashlib.md5(password.encode("ascii")).hexdigest()

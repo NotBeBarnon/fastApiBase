@@ -1,15 +1,17 @@
 # -*- coding: utf-8 -*-
-# @Time    : 2022/12/7 9:17
-# @Author  : fzx
 # @Description : 单例工具
+from __future__ import annotations
+
 import abc
 from typing import Any
 
 
-class SingletonDecorator(object):
-    def __init__(self, cls):
+class SingletonDecorator:
+    """单例装饰器（按调用一次即创建一个实例）"""
+
+    def __init__(self, cls: type) -> None:
         self._cls = cls
-        self._instance = {}
+        self._instance: dict[type, Any] = {}
 
     def __call__(self) -> Any:
         if self._cls not in self._instance:
@@ -18,11 +20,11 @@ class SingletonDecorator(object):
 
 
 class SingletonMeta(type):
-    __instances = {}
+    __instances: dict[type, Any] = {}
 
-    def __call__(cls, *args, **kwargs):
+    def __call__(cls, *args: Any, **kwargs: Any) -> Any:
         if cls not in cls.__instances:
-            cls.__instances[cls] = super(SingletonMeta, cls).__call__(*args, **kwargs)
+            cls.__instances[cls] = super().__call__(*args, **kwargs)
         return cls.__instances[cls]
 
 

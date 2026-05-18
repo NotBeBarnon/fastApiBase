@@ -1,41 +1,33 @@
 # -*- coding: utf-8 -*-
-# @Time    : 2022/3/2
-# @Author  : fzx
-# @Description :
+# @Description : cx_Freeze 编译脚本（Python 3.12）
+from __future__ import annotations
+
 import platform
 import re
 import sys
+from collections.abc import Iterator
 from pathlib import Path
-from typing import List, Iterator
 
-from cx_Freeze import setup, Executable
+from cx_Freeze import Executable, setup
 
 from src.version import VERSION
 
 PROJECT_DIR: Path = Path(__file__).parent
 
 
-# 三个读取依赖的工具方法
 def get_python_packages(file_path: Path) -> Iterator[str]:
-    """
-    查找目录下所有python包
-    """
+    """查找目录下所有 python 包"""
     if not file_path.is_dir():
         return
     for child in file_path.iterdir():
-        if child.is_dir():
-            is_python_package = set(child.glob("__init__.py"))
-            if is_python_package:
-                # print(f"init-{is_python_package}")
-                yield child.name
+        if child.is_dir() and any(child.glob("__init__.py")):
+            yield child.name
 
 
 def get_all_packages() -> Iterator[str]:
-    """
-    获取site中所有的python包
-    """
-    site_regex = re.compile("[\\\\|/]site-packages")
-    site_path = None
+    """获取 site-packages 中所有的 python 包"""
+    site_regex = re.compile(r"[\\/]site-packages")
+    site_path: Path | None = None
     for path in sys.path:
         if site_regex.search(path):
             site_path = Path(path)
@@ -44,16 +36,15 @@ def get_all_packages() -> Iterator[str]:
 
 
 def get_all_requirements() -> Iterator[str]:
-    package_regex = re.compile("[a-zA-Z\-_]+")
+    package_regex = re.compile(r"[a-zA-Z\-_]+")
+    with (PROJECT_DIR / "requirements.txt").open(encoding="utf-8") as f:
+        for line in f:
+            m = package_regex.match(line)
+            if m:
+                yield m.group().replace("-", "_")
 
-    for line_content in open(PROJECT_DIR / "requirements.txt", "r"):
-        pack_name = package_regex.match(line_content)
-        if pack_name:
-            yield pack_name.group().replace("-", "_")
 
-
-# 添加依赖
-packages: List = []
+packages: list[str] = []
 if platform.system() == "Linux":
     packages.append("uvloop")
 

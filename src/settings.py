@@ -1,86 +1,159 @@
 # -*- coding: utf-8 -*-
-# @Time    : 2022/3/2:14:09
-# @Author  : fzx
-# @Description : 配置文件
+# @Description : 项目配置（Python 3.12 + pydantic-settings v2）
+from __future__ import annotations
 
-import io
-import json
-import os
 import sys
+import tomllib
 from pathlib import Path
 
 import dotenv
-import tomlkit
 from loguru import logger
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # 项目根目录
 PROJECT_DIR: Path = Path(__file__).parents[1]
-if PROJECT_DIR.name == "lib":  # 适配cx_Freeze打包项目后根目录的变化
+if PROJECT_DIR.name == "lib":  # cx_Freeze 打包后根目录会变
     PROJECT_DIR = PROJECT_DIR.parent
 
-# 加载环境变量
-dotenv.load_dotenv(PROJECT_DIR.joinpath("project_env"))
-# 加载项目配置
-__toml_config = json.loads(
-    json.dumps(
-        tomlkit.loads(PROJECT_DIR.joinpath("pyproject.toml").read_bytes())
+# 加载 .env / project_env
+dotenv.load_dotenv(PROJECT_DIR / "project_env")
+
+# 读取 pyproject.toml
+with (PROJECT_DIR / "pyproject.toml").open("rb") as _f:
+    _toml = tomllib.load(_f)
+
+VERSION: str = _toml["tool"]["commitizen"]["version"]
+VERSION_FORMAT: str = _toml["tool"]["commitizen"]["tag_format"].replace("$version", VERSION)
+_PROJECT_CONFIG: dict = _toml["myproject"]
+
+
+# ---------- 配置模型 ----------
+class DatabasePoolConfig(BaseModel):
+    minsize: int = 24
+    maxsize: int = 24
+
+
+class RedisSentinelsConfig(BaseModel):
+    service: list[tuple[str, int]] = Field(default_factory=list)
+    service_name: str = "mymaster"
+
+
+class RedisConfig(BaseModel):
+    host: str = "localhost"
+    port: int = 6379
+    db: int = 0
+    user: str = ""
+    password: str = ""
+    namespace: str = "FastSample"
+    retry_interval: int = 10
+    sentinels: RedisSentinelsConfig = Field(default_factory=RedisSentinelsConfig)
+    more_config: dict = Field(default_factory=dict)
+
+
+class MQConfig(BaseModel):
+    bootstrap_servers: list[str] = Field(default_factory=lambda: ["localhost:9092"])
+    user: str = ""
+    password: str = ""
+    retry_interval: int = 5
+    num_partitions: int = 1
+    replication_factor: int = 1
+    topic_configs: dict = Field(default_factory=dict)
+    topics: dict = Field(default_factory=dict)
+
+
+class AppSettings(BaseSettings):
+    """
+    优先级：环境变量 > project_env > pyproject.toml > 默认值
+    """
+
+    model_config = SettingsConfigDict(
+        env_file=str(PROJECT_DIR / "project_env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+        case_sensitive=False,
     )
-)  # 转换包装类型为Python默认类型
-VERSION = __toml_config["tool"]["commitizen"]["version"]
-VERSION_FORMAT = __toml_config["tool"]["commitizen"]["tag_format"].replace("$version", VERSION)
-PROJECT_CONFIG = __toml_config["myproject"]
+
+    DEV: bool = bool(_PROJECT_CONFIG.get("DEV", False))
+    PROD: bool = not bool(_PROJECT_CONFIG.get("DEV", False)) and bool(_PROJECT_CONFIG.get("PROD", True))
+    LOG_LEVEL: str = str(_PROJECT_CONFIG.get("LOG_LEVEL", "info")).upper()
+
+    HTTP_API_LISTEN_HOST: str = _PROJECT_CONFIG.get("HTTP_API_LISTEN_HOST", "0.0.0.0")
+    HTTP_API_LISTEN_PORT: int = 8080
+    HTTP_BASE_URL: str = _PROJECT_CONFIG.get("HTTP_BASE_URL", "/api/sample")
+
+    # 数据库
+    DATABASE_HOST: str = Field(default="localhost", alias="FASTSAMPLE_DATABASE_HOST")
+    DATABASE_PORT: int = Field(default=3306, alias="FASTSAMPLE_DATABASE_PORT")
+    DATABASE_USER: str = Field(default="root", alias="FASTSAMPLE_DATABASE_USER")
+    DATABASE_PASSWORD: str = Field(default="123456", alias="FASTSAMPLE_DATABASE_PASSWORD")
+    DATABASE_NAME: str = Field(default="FastSample", alias="FASTSAMPLE_DATABASE_NAME")
+
+    # Redis / Kafka 环境变量覆盖
+    FS_REDIS_HOST: str | None = None
+    FS_REDIS_PORT: int | None = None
+    FS_REDIS_SENTINEL_SERVICE: str | None = None
+    FS_REDIS_SENTINEL_SERVICE_NAME: str | None = None
+    FS_KAFKA_SERVICE: str | None = None
 
 
-# DEBUG控制
-DEV = True if PROJECT_CONFIG.get("DEV", False) else False
-# 生产环境控制
-PROD = False if DEV or not PROJECT_CONFIG.get("PROD", True) else True
+settings = AppSettings()
+
+DEV = settings.DEV
+PROD = settings.PROD
+HTTP_API_LISTEN_HOST = settings.HTTP_API_LISTEN_HOST
+HTTP_API_LISTEN_PORT = settings.HTTP_API_LISTEN_PORT
+HTTP_BASE_URL = settings.HTTP_BASE_URL
 
 DEV and logger.info("[DEV] Server")
 PROD and logger.info("[PROD] Server")
 
-# 服务监听
-HTTP_API_LISTEN_HOST = PROJECT_CONFIG.get("HTTP_API_LISTEN_HOST", "0.0.0.0")
-HTTP_API_LISTEN_PORT = int(os.getenv("HTTP_API_LISTEN_PORT", 8080))
-HTTP_BASE_URL = PROJECT_CONFIG.get("HTTP_BASE_URL", "/api/sample")
+# 数据库配置池
+_db_pool = DatabasePoolConfig(**_PROJECT_CONFIG.get("database", {}))
 
-# 消息队列配置
-MQ_CONFIG = PROJECT_CONFIG["mq"]
-__kafka_service = os.getenv("FS_KAFKA_SERVICE")
-if __kafka_service:
-    MQ_CONFIG["bootstrap_servers"] = [item_.strip() for item_ in __kafka_service.split(",")]
+# Redis 配置
+_redis_raw = _PROJECT_CONFIG.get("redis", {})
+# tuple 化 sentinel service
+if "sentinels" in _redis_raw and "service" in _redis_raw["sentinels"]:
+    _redis_raw["sentinels"]["service"] = [tuple(s) for s in _redis_raw["sentinels"]["service"]]
+_redis_cfg = RedisConfig(**_redis_raw)
 
+# 环境变量覆盖
+if settings.FS_REDIS_HOST:
+    _redis_cfg.host = settings.FS_REDIS_HOST
+if settings.FS_REDIS_PORT:
+    _redis_cfg.port = settings.FS_REDIS_PORT
+if settings.FS_REDIS_SENTINEL_SERVICE:
+    _redis_cfg.sentinels.service = [
+        (host.strip(), int(port)) for host, port in (item.split(":") for item in settings.FS_REDIS_SENTINEL_SERVICE.split(","))
+    ]
+if settings.FS_REDIS_SENTINEL_SERVICE_NAME:
+    _redis_cfg.sentinels.service_name = settings.FS_REDIS_SENTINEL_SERVICE_NAME
 
-# redis 配置
-REDIS_CONFIG = PROJECT_CONFIG["redis"]
-__redis_service = os.getenv("FS_REDIS_SENTINEL_SERVICE")
-__redis_service = [(item_[0].strip(), int(item_[1])) for item_ in REDIS_CONFIG["sentinels"]["service"]] \
-    if __redis_service is None \
-    else [(item_[0].strip(), int(item_[1])) for item_ in (_.split(":") for _ in __redis_service.split(","))]
-REDIS_CONFIG.update(
-    {
-        "host": os.getenv("FS_REDIS_HOST", REDIS_CONFIG["host"]),
-        "port": int(os.getenv("FS_REDIS_PORT", REDIS_CONFIG["port"])),
-        "sentinels": {
-            "service": __redis_service,
-            "service_name": os.getenv("FS_REDIS_SENTINEL_SERVICE_NAME", REDIS_CONFIG["sentinels"]["service_name"]),
-        }
-    }
-)
+REDIS_CONFIG = _redis_cfg.model_dump()
 
-# 配置日志
+# MQ 配置
+_mq_cfg = MQConfig(**_PROJECT_CONFIG.get("mq", {}))
+if settings.FS_KAFKA_SERVICE:
+    _mq_cfg.bootstrap_servers = [item.strip() for item in settings.FS_KAFKA_SERVICE.split(",")]
+MQ_CONFIG = _mq_cfg.model_dump()
+
+# 项目级配置（兼容老代码）
+PROJECT_CONFIG = _PROJECT_CONFIG
+
+# ---------- 日志 ----------
 LOGGER_CONFIG = {
     "handlers": [
         {
             "sink": sys.stdout,
-            "level": "DEBUG" if DEV else PROJECT_CONFIG.get("LOG_LEVEL", "info").upper(),
+            "level": "DEBUG" if DEV else settings.LOG_LEVEL,
             "enqueue": True,
             "backtrace": True,
             "diagnose": True,
-            "catch": True
+            "catch": True,
         },
         {
-            "sink": PROJECT_DIR.joinpath("logs/project.log"),
+            "sink": PROJECT_DIR / "logs" / "project.log",
             "rotation": "3 MB",
             "retention": "30 days",
             "level": "INFO",
@@ -88,67 +161,50 @@ LOGGER_CONFIG = {
             "backtrace": True,
             "diagnose": True,
             "encoding": "utf-8",
-            "catch": True
+            "catch": True,
         },
     ]
 }
-
 logger.configure(**LOGGER_CONFIG)
 
+# ---------- 时区 / 数据库 ----------
 DEFAULT_TIMEZONE = "UTC"
 LOCAL_TIMEZONE = "Asia/Shanghai"
 
-DATABASE_CONFIG = {
+DATABASE_CONFIG: dict = {
     "connections": {
         "default": {
             "engine": "tortoise.backends.mysql",
             "credentials": {
-                "host": os.getenv("FASTSAMPLE_DATABASE_HOST", "localhost"),
-                "port": int(os.getenv("FASTSAMPLE_DATABASE_PORT", 3306)),
-                "user": os.getenv("FASTSAMPLE_DATABASE_USER", "root"),
-                "password": os.getenv("FASTSAMPLE_DATABASE_PASSWORD", "123456"),
-                "database": os.getenv("FASTSAMPLE_DATABASE_NAME", "FastSample"),
-                "minsize": PROJECT_CONFIG.get("database", {}).get("minsize", 24),
-                "maxsize": PROJECT_CONFIG.get("database", {}).get("maxsize", 24),
+                "host": settings.DATABASE_HOST,
+                "port": settings.DATABASE_PORT,
+                "user": settings.DATABASE_USER,
+                "password": settings.DATABASE_PASSWORD,
+                "database": settings.DATABASE_NAME,
+                "minsize": _db_pool.minsize,
+                "maxsize": _db_pool.maxsize,
                 "charset": "utf8mb4",
-                "pool_recycle": 3600
-            }
+                "pool_recycle": 3600,
+            },
         },
-        # "double": {
-        #     "engine": "tortoise.backends.mysql",
-        #     "credentials": {
-        #         "host": os.getenv("FASTDOUBLE_DATABASE_HOST", "localhost"),
-        #         "port": int(os.getenv("FASTDOUBLE_DATABASE_PORT", 3306)),
-        #         "user": os.getenv("FASTDOUBLE_DATABASE_USER", "fzx"),
-        #         "password": os.getenv("FASTDOUBLE_DATABASE_PASSWORD", "satncs"),
-        #         "database": os.getenv("FASTDOUBLE_DATABASE_NAME", "FastDouble"),
-        #         "charset": "utf8mb4",
-        #     }
-        # },
     },
     "apps": {
-        # 1.注意此处的app代表的并不与FastAPI的routers对应
-        # 2.在Tortoise-orm使用外键时，需要用到该app名称来指执行模型，"app.model"，所以同一个app中不要出现名称相同的两个模型类
-        # 3.app的划分结合 规则2与实际情况进行划分即可
+        # 真正使用时取消注释：
         # "user": {
-        #     "models": [
-        #         "src.faster.routers.user.models",
-        #     ],
+        #     "models": ["src.faster.routers.users.models"],
         #     "default_connection": "default",
         # },
-        # "double": {
-        #     "models": [
-        #         "src.faster.routers.resource.models",
-        #     ],
-        #     "default_connection": "double",
-        # }
+        # "resource": {
+        #     "models": ["src.faster.routers.resource.models"],
+        #     "default_connection": "default",
+        # },
     },
-    "use_tz": True,  # 设置数据库总是存储utc时间
-    "timezone": DEFAULT_TIMEZONE,  # 设置时区转换，即从数据库取出utc时间后会被转换为timezone所指定的时区时间（待验证）
+    "use_tz": True,
+    "timezone": DEFAULT_TIMEZONE,
 }
-# 仅开发时需要记录迁移情况
-DEV and DATABASE_CONFIG["apps"].update({
-    "aerich": {
+
+if DEV:
+    DATABASE_CONFIG["apps"]["aerich"] = {
         "models": ["aerich.models"],
         "default_connection": "default",
-    }})
+    }

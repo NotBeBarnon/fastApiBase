@@ -1,20 +1,16 @@
 # -*- coding: utf-8 -*-
-# @Time    : 2022/3/2:16:29
-# @Author  : fzx
-# @Description :
+from __future__ import annotations
 
-from fastapi import Request, APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import ORJSONResponse
 from loguru import logger
 from pydantic import BaseModel
 
-# from .resource.routers import resource_routers
-# from .user.routers import user_routers
+from ...settings import HTTP_BASE_URL
 from .resource.routers import resource_router
 from .users.routers import user_router
-from ...settings import HTTP_BASE_URL
 
-__all__ = ()
+__all__ = ("all_router",)
 
 all_router = APIRouter(prefix=HTTP_BASE_URL)
 all_router.include_router(user_router)
@@ -32,7 +28,6 @@ class FastAPIStatus(BaseModel):
     response_model=FastAPIStatus,
     response_description="验活成功响应",
 )
-def home(request: Request):
+def home(request: Request) -> FastAPIStatus:
     logger.debug(f"Request from [{request.client}]")
     return FastAPIStatus()
-

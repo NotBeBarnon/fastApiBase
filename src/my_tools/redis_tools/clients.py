@@ -1,41 +1,52 @@
 # -*- coding: utf-8 -*-
-# @Time    : 2023/2/17:14:40
-# @Author  : fzx
-# @Description : redis 哨兵模式使用, 客户端连接
-import abc
+# @Description : Redis 客户端（redis>=5.0，asyncio + 哨兵）
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import hashlib
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass, field
 from enum import Enum
 from functools import wraps
-from typing import Tuple, Any, Union, Callable, Iterator, Set
+from typing import Any
 
-import aioredis
-from aioredis.sentinel import Sentinel
-from loguru import logger
+import redis.asyncio as aioredis
 from fastapi.responses import Response
+from loguru import logger
+from redis.asyncio.sentinel import Sentinel
+from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import TimeoutError as RedisTimeoutError
+
 from src.my_tools.singleton_tools import SingletonABCMeta
 from src.settings import REDIS_CONFIG
 
+__all__ = (
+    "CLEAN_LUA_SCRIPT",
+    "RedisNamespace",
+    "RedisNamespaceABC",
+    "RedisClient",
+    "RedisSentinelClient",
+    "SentinelNodeEnum",
+)
+
 CLEAN_LUA_SCRIPT = """
-        local cursor = "0"
-        repeat
-            local result = redis.call("SCAN", cursor, "MATCH", ARGV[1], "COUNT", 10)
-            cursor = result[1]
-            for _, key in ipairs(result[2]) do
-                redis.call("del", key)
-            end
-        until cursor == "0"
-        """
+local cursor = "0"
+repeat
+    local result = redis.call("SCAN", cursor, "MATCH", ARGV[1], "COUNT", 10)
+    cursor = result[1]
+    for _, key in ipairs(result[2]) do
+        redis.call("del", key)
+    end
+until cursor == "0"
+"""
 
 
+# ---------------------------------------------------------------------------
+# Namespace
+# ---------------------------------------------------------------------------
 class RedisNamespaceABC(metaclass=SingletonABCMeta):
-
-    @property
-    @abc.abstractmethod
-    def namespace(self) -> bytes:
-        ...
+    namespace: bytes
 
     @classmethod
     def get_namespace(cls) -> str:
@@ -46,20 +57,14 @@ class RedisNamespaceABC(metaclass=SingletonABCMeta):
         return cls.namespace
 
     @classmethod
-    def key(cls, key: Union[str, bytes]) -> bytes:
+    def key(cls, key: str | bytes) -> bytes:
         if isinstance(key, str):
             key = key.encode("utf-8")
         return cls.namespace + b":" + key
 
     @classmethod
-    def hash_http_cache_key(cls, route: str, query: str = None) -> bytes:
-        if query:
-            m = hashlib.md5()
-            m.update(query.encode("utf-8"))
-            hash_query = m.hexdigest().encode("utf-8")
-        else:
-            hash_query = b""
-        # 如果是GET请求，则进行缓存逻辑
+    def hash_http_cache_key(cls, route: str, query: str | None = None) -> bytes:
+        hash_query = hashlib.md5(query.encode("utf-8")).hexdigest().encode("utf-8") if query else b""
         return cls.namespace + b":http_cache:" + route.encode("utf-8") + b":" + hash_query
 
     @classmethod
@@ -67,44 +72,115 @@ class RedisNamespaceABC(metaclass=SingletonABCMeta):
         return cls.namespace.decode("utf-8") + ":" + route + "*"
 
 
-@dataclass(frozen=True)
 class RedisNamespace(RedisNamespaceABC):
     namespace = REDIS_CONFIG["namespace"].encode("utf-8")
 
 
-@dataclass
-class RedisClient:
-    """
-    Redis客户端
-    - host
-    - port
-    - user : 账号
-    - password : 密码
-    - group : 消费者组
-    - retry_interval : 重连间隔 单位秒
-    """
-    host: str
-    port: int
-    db: int
-    user: str
-    password: str
+# ---------------------------------------------------------------------------
+# 公共基类：单连接 / 哨兵 共享重连状态机
+# ---------------------------------------------------------------------------
+class _BaseRedisClient:
+    """共享生命周期 + 自动重连模板"""
+
     retry_interval: int
     conn_alive_flag: bool = False
-    __conn_success_event: asyncio.Event = None
-    __conn_alive_event: asyncio.Event = None
-    __conn_stop_event: asyncio.Event = None
+
+    def __init__(self) -> None:
+        self._conn_alive_event: asyncio.Event | None = None
+        self._conn_success_event: asyncio.Event | None = None
+        self._conn_stop_event: asyncio.Event | None = None
+
+    # —— 子类实现 ——
+    async def _connect(self) -> bool: ...
+    async def _release(self) -> None: ...
+    def _label(self) -> str: ...
+
+    async def _init_loop(self) -> None:
+        while self.conn_alive_flag:
+            logger.info(f"Connect {self._label()}")
+            try:
+                ok = await self._connect()
+                if ok:
+                    self._conn_success_event.set()
+                    logger.success(f"Connected {self._label()}")
+                    return
+            except Exception as exc:
+                logger.warning(f"Failed to connect {self._label()}: {exc.__class__.__name__}:{exc}")
+            await asyncio.sleep(self.retry_interval)
+
+    async def _start(self) -> None:
+        if not self._conn_stop_event.is_set():
+            logger.warning(f"{self._label()} already running")
+            return
+        self._conn_stop_event.clear()
+        logger.success(f"{self._label()} begin start ...")
+
+        while self.conn_alive_flag:
+            self._conn_alive_event.clear()
+            self._conn_success_event.clear()
+            await self._init_loop()
+
+            await self._conn_alive_event.wait()
+            logger.warning(f"{self._label()} disconnected ... reconnect={self.conn_alive_flag}")
+            await self._release()
+
+        self._conn_stop_event.set()
+        self._conn_success_event.set()
+        self._conn_alive_event.set()
+        logger.warning(f"{self._label()} client stopped")
+
+    def _stop_signal(self) -> None:
+        if isinstance(self._conn_success_event, asyncio.Event):
+            self._conn_success_event.clear()
+        if isinstance(self._conn_alive_event, asyncio.Event):
+            self._conn_alive_event.set()
+
+    async def wait_connect(self) -> None:
+        if isinstance(self._conn_success_event, asyncio.Event):
+            await self._conn_success_event.wait()
+
+    async def wait_stop(self) -> None:
+        if isinstance(self._conn_stop_event, asyncio.Event):
+            await self._conn_stop_event.wait()
+
+    def start(self) -> None:
+        self.conn_alive_flag = True
+        if not isinstance(self._conn_stop_event, asyncio.Event):
+            self._conn_alive_event = asyncio.Event()
+            self._conn_success_event = asyncio.Event()
+            self._conn_stop_event = asyncio.Event()
+        self._conn_stop_event.set()
+        self._conn_alive_event.clear()
+        self._conn_success_event.clear()
+        asyncio.create_task(self._start())
+
+    def stop(self) -> None:
+        self.conn_alive_flag = False
+        logger.warning(f"Call Stop {self._label()}")
+        self._stop_signal()
+
+    def restart(self) -> None:
+        logger.warning(f"Call Restart {self._label()}")
+        self._stop_signal()
+
+
+# ---------------------------------------------------------------------------
+# 单连接客户端
+# ---------------------------------------------------------------------------
+class RedisClient(_BaseRedisClient):
+    """普通 Redis 单连接客户端"""
 
     def __init__(
-            self,
-            host: str,
-            port: int,
-            db: int,
-            *,
-            user: str = None,
-            password: str = None,
-            retry_interval: int = 10,
-            **kwargs,
-    ):
+        self,
+        host: str,
+        port: int,
+        db: int,
+        *,
+        user: str | None = None,
+        password: str | None = None,
+        retry_interval: int = 10,
+        **kwargs: Any,
+    ) -> None:
         super().__init__()
         self.host = host
         self.port = port
@@ -112,232 +188,114 @@ class RedisClient:
         self.user = user or None
         self.password = password or None
         self.retry_interval = retry_interval
-        self.__pass_param = kwargs
+        self._pass_param = kwargs
+        self._pool_client: aioredis.Redis | None = None
 
-        self.__pool_client: aioredis.Redis = None  # Redis连接池客户端
+    def _label(self) -> str:
+        return f"Redis<{self.user}:{self.password}@{self.host}:{self.port}>"
 
-    def set_host(self, host: str, port: int) -> Tuple[str, int]:
-        pre_ = (self.host, self.port)
-        now_ = (host, port)
-        if pre_ != now_:
-            # 重新设置host，并重启
+    def set_host(self, host: str, port: int) -> tuple[str, int]:
+        if (self.host, self.port) != (host, port):
             self.host = host
             self.port = port
             self.restart()
-
         return self.host, self.port
 
-    async def __init_redis(self):
-        self.__pool_client = None
-        while self.conn_alive_flag:
-            logger.info(
-                f"Connect Redis<{self.user}:{self.password}@{self.host}:{self.port}>, _RedisClient__conn_success_event={self.__conn_success_event}")
-            try:
-                pool_client_: aioredis.Redis = aioredis.Redis(
-                    host=self.host,
-                    port=self.port,
-                    db=self.db,
-                    username=self.user,
-                    password=self.password,
-                    **self.__pass_param
-                )
+    async def _connect(self) -> bool:
+        client = aioredis.Redis(
+            host=self.host,
+            port=self.port,
+            db=self.db,
+            username=self.user,
+            password=self.password,
+            **self._pass_param,
+        )
+        await client.set(RedisNamespace.get_namespace_bytes(), b"alive", ex=self.retry_interval * 2)
+        self._pool_client = client
+        return True
 
-                await pool_client_.set(RedisNamespace.get_namespace_bytes(), b"alive", ex=self.retry_interval * 2)
-                self.__pool_client = pool_client_
+    async def _release(self) -> None:
+        if self._pool_client is not None:
+            client = self._pool_client
+            self._pool_client = None
+            await client.aclose()
 
-                self.__conn_success_event.set()
-                logger.success(
-                    f"Successfully connect Redis<{self.user}:{self.password}@{self.host}:{self.port}>, _RedisClient__conn_success_event={self.__conn_success_event}"
-                )
-                break
-            except Exception as exc:
-                logger.warning(
-                    f"Failed to connect Redis<{self.user}:{self.password}@{self.host}:{self.port}>: {exc.__class__.__name__}:{exc}")
-                await asyncio.sleep(self.retry_interval)
-
-    async def __start(self):
-        if not self.__conn_stop_event.is_set():
-            # __conn_stop_event没有被标记，说明任务还没有结束，无需重复启动
-            logger.warning(
-                f"Redis<{self.user}:{self.password}@{self.host}:{self.port}> is already running, _RedisClient__conn_alive_event={self.__conn_alive_event}"
-            )
-            return
-
-        self.__conn_stop_event.clear()  # 清除标记，代表任务开始
-        logger.success(f"Redis<{self.user}:{self.password}@{self.host}:{self.port}> begin start ...")
-        while self.conn_alive_flag:
-            self.__conn_alive_event.clear()
-            self.__conn_success_event.clear()
-            await self.__init_redis()
-
-            await self.__conn_alive_event.wait()
-            if isinstance(self.__pool_client, aioredis.Redis):
-                logger.warning(
-                    f"Redis<{self.user}:{self.password}@{self.host}:{self.port}> disconnected ... reconnect={self.conn_alive_flag}")
-                redis_client = self.__pool_client
-                self.__pool_client = None
-                await redis_client.close()  # 此处等待资源释放
-
-        self.__conn_stop_event.set()  # 标记任务结束
-        self.__conn_success_event.set()
-        self.__conn_alive_event.set()
-        logger.warning(f"Redis<{self.user}:{self.password}@{self.host}:{self.port}> client stopped")
-
-    def __stop(self):
-        if isinstance(self.__conn_success_event, asyncio.Event):
-            self.__conn_success_event.clear()
-        if isinstance(self.__conn_alive_event, asyncio.Event):
-            self.__conn_alive_event.set()
-
-    async def wait_connect(self):
-        if isinstance(self.__conn_success_event, asyncio.Event):
-            await self.__conn_success_event.wait()
-
-    async def wait_stop(self):
-        if isinstance(self.__conn_stop_event, asyncio.Event):
-            await self.__conn_stop_event.wait()
-
-    def start(self):
-        """
-        必须异步启动，但是会额外提交一个__start的task到事件循环中
-        """
-        self.conn_alive_flag = True
-        if not isinstance(self.__conn_stop_event, asyncio.Event):
-            self.__conn_alive_event = asyncio.Event()
-            self.__conn_success_event = asyncio.Event()
-            self.__conn_stop_event = asyncio.Event()
-        # 设置启动初始状态
-        self.__conn_stop_event.set()
-        self.__conn_alive_event.clear()
-        self.__conn_success_event.clear()
-        asyncio.create_task(self.__start())
-
-    def stop(self):
-        self.conn_alive_flag = False
-        logger.warning(f"Call Stop {self}")
-        self.__stop()
-
-    def restart(self):
-        logger.warning(f"Call Restart {self}")
-        self.__stop()
-
-    def get_client(self, node: Any):
+    def get_client(self, node: Any = None) -> RedisClient:
         return self
 
-    def client(self, node: Any) -> aioredis.Redis:
-        return self.__pool_client
+    def client(self, node: Any = None) -> aioredis.Redis | None:
+        return self._pool_client
 
-    def __enter__(self) -> aioredis.Redis:
-        return self.__pool_client
+    def __enter__(self) -> aioredis.Redis | None:
+        return self._pool_client
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """
-        异常会传递进来，只处理redis连接错误的异常
-        return True 时异常不会传递到使用的地方
-        """
-        if exc_type is None:
-            return False
+    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+        return _handle_redis_exc(exc_type, exc_val, self, on_conn_err=self.restart)
 
-        if isinstance(exc_val, (aioredis.ConnectionError, aioredis.TimeoutError)):
-            logger.error(f"Redis Error {exc_type}:{exc_val}")
-            self.restart()
-            return True
+    async def __aenter__(self) -> aioredis.Redis | None:
+        return self._pool_client
 
-        if isinstance(exc_val, AssertionError):
-            # Redis客户端以及其他的断言错误，抛出AssertionError
-            logger.warning(f"RedisClient -- {exc_type}:{exc_val}")
-            return True
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> bool:
+        return _handle_redis_exc(exc_type, exc_val, self, on_conn_err=self.restart)
 
-        return False
+    def __call__(self, key: bytes | str, response: Response, ex_pttl: int = 3000) -> Callable:
+        """FastAPI 缓存装饰器"""
 
-    async def __aenter__(self) -> aioredis.Redis:
-        return self.__pool_client
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """
-        异常会传递进来，只处理redis连接错误的异常
-        return True 时异常不会传递到使用的地方
-        """
-        if exc_type is None:
-            return False
-
-        if isinstance(exc_val, (aioredis.ConnectionError, aioredis.TimeoutError)):
-            logger.error(f"Redis Error {exc_type}:{exc_val}")
-            self.restart()
-            return True
-
-        if isinstance(exc_val, AssertionError):
-            # Redis客户端以及其他的断言错误，抛出AssertionError
-            logger.warning(f"RedisClient -- {exc_type}:{exc_val}")
-            return True
-
-        return False
-
-    def __call__(self, key: Union[bytes, str], response: Response, ex_pttl: int = 3000) -> Callable:
-        """
-        针对FastAPI的缓存装饰器，如果是位置使用，请修改response参数
-        :param key: 访问的key
-        :param ex_pttl: 缓存过期时间，单位毫秒
-        :param response: 响应对象
-        :return:
-        """
-
-        def decorator_(func: Callable) -> Callable:
+        def decorator(func: Callable) -> Callable:
             @wraps(func)
-            async def cache_wrapper_(*args_, **kwargs_):
-                if isinstance(self.__pool_client, aioredis.Redis):
+            async def wrapper(*args, **kwargs):
+                if self._pool_client is not None:
                     with contextlib.suppress(Exception):
-                        value = await self.__pool_client.get(key)
+                        value = await self._pool_client.get(key)
                         if value is not None:
-                            await self.__pool_client.pexpire(key, ex_pttl)
+                            await self._pool_client.pexpire(key, ex_pttl)
                             response.body = value
                             return response
-                return await func(*args_, **kwargs_)
+                return await func(*args, **kwargs)
 
-            return cache_wrapper_
+            return wrapper
 
-        return decorator_
+        return decorator
 
-    async def clean_cache_for_route(self, route: str):
+    async def clean_cache_for_route(self, route: str) -> bool:
+        if self._pool_client is None:
+            return False
         try:
-            await self.__pool_client.eval(
-                CLEAN_LUA_SCRIPT, 0, RedisNamespace.get_all_keys_by_route(route)
-            )
-        except Exception as e:
-            logger.error(e)
+            await self._pool_client.eval(CLEAN_LUA_SCRIPT, 0, RedisNamespace.get_all_keys_by_route(route))
+        except Exception as exc:
+            logger.error(exc)
             return False
         return True
 
 
+# ---------------------------------------------------------------------------
+# 哨兵客户端
+# ---------------------------------------------------------------------------
 class SentinelNodeEnum(str, Enum):
     master = "MASTER"
     slave = "SLAVE"
 
 
 @dataclass
-class RedisSentinelClient:
-    sentinels: Set[Tuple[str, int]]
-    service_name: str
-    db: int = 0,
-    user: str = None,
-    password: str = None,
+class RedisSentinelClient(_BaseRedisClient):
+    sentinels: set[tuple[str, int]] = field(default_factory=set)
+    service_name: str = "mymaster"
+    db: int = 0
+    user: str | None = None
+    password: str | None = None
     retry_interval: int = 10
-    conn_alive_flag: bool = False
-    __conn_success_event: asyncio.Event = None
-    __conn_alive_event: asyncio.Event = None
-    __conn_stop_event: asyncio.Event = None
 
     def __init__(
-            self,
-            sentinels: Iterator[Tuple[str, int]],
-            *,
-            service_name: str = "mymaster",
-            db: int = 0,
-            user: str = None,
-            password: str = None,
-            retry_interval: int = 10,
-            **kwargs,
-    ):
+        self,
+        sentinels: Iterable[tuple[str, int]],
+        *,
+        service_name: str = "mymaster",
+        db: int = 0,
+        user: str | None = None,
+        password: str | None = None,
+        retry_interval: int = 10,
+        **kwargs: Any,
+    ) -> None:
         super().__init__()
         self.sentinels = set(sentinels)
         self.service_name = service_name
@@ -345,204 +303,118 @@ class RedisSentinelClient:
         self.user = user or None
         self.password = password or None
         self.retry_interval = retry_interval
-        self.__pass_param = kwargs
+        self._pass_param = kwargs
 
-        self.__sentinel_manager: Sentinel = None  # 哨兵客户端
-        self.__node: str = None  # 哨兵节点类型
-        self.__master_redis: aioredis.Redis = None
-        self.__slave_redis: aioredis.Redis = None
+        self._sentinel_manager: Sentinel | None = None
+        self._node: SentinelNodeEnum | None = None
+        self._master_redis: aioredis.Redis | None = None
+        self._slave_redis: aioredis.Redis | None = None
 
-    async def __init_redis(self):
-        self.__sentinel_manager = None
-        while self.conn_alive_flag:
-            logger.info(
-                f"Connect Redis<{self.user}:{self.password}@{self.sentinels}>, _RedisSentinelClient__conn_success_event={self.__conn_success_event}")
-            try:
-                sentinel_: Sentinel = Sentinel(
-                    sentinels=self.sentinels,
-                    db=self.db,
-                    password=self.password,
-                    username=self.user,
-                    **self.__pass_param,
-                )
-                master_redis: aioredis.Redis = sentinel_.master_for(self.service_name)
-                await master_redis.set(RedisNamespace.get_namespace_bytes(), b"alive", ex=self.retry_interval * 2)
-                self.__sentinel_manager = sentinel_
-                self.__master_redis = master_redis
-                self.__slave_redis = sentinel_.slave_for(self.service_name)
+    def _label(self) -> str:
+        return f"RedisSentinel<{self.user}:{self.password}@{self.sentinels}>"
 
-                self.__conn_success_event.set()
-                logger.success(
-                    f"Successfully connect Redis<{self.user}:{self.password}@{self.sentinels}>,"
-                    f" _RedisSentinelClient__conn_success_event={self.__conn_success_event}"
-                )
-                break
-            except Exception as exc:
-                logger.warning(
-                    f"Failed to connect Redis<{self.user}:{self.password}@{self.sentinels}>: {exc.__class__.__name__}:{exc}")
-                await asyncio.sleep(self.retry_interval)
+    async def _connect(self) -> bool:
+        sentinel = Sentinel(
+            sentinels=list(self.sentinels),
+            db=self.db,
+            password=self.password,
+            username=self.user,
+            **self._pass_param,
+        )
+        master = sentinel.master_for(self.service_name)
+        await master.set(RedisNamespace.get_namespace_bytes(), b"alive", ex=self.retry_interval * 2)
+        self._sentinel_manager = sentinel
+        self._master_redis = master
+        self._slave_redis = sentinel.slave_for(self.service_name)
+        return True
 
-    async def __start(self):
-        if not self.__conn_stop_event.is_set():
-            # __conn_stop_event没有被标记，说明任务还没有结束，无需重复启动
-            logger.warning(
-                f"Redis<{self.user}:{self.password}@{self.sentinels}> is already running,"
-                f" _RedisSentinelClient__conn_alive_event={self.__conn_alive_event}"
-            )
+    async def _release(self) -> None:
+        if self._sentinel_manager is None:
             return
+        sentinel = self._sentinel_manager
+        self._sentinel_manager = None
+        self._master_redis = None
+        self._slave_redis = None
+        await asyncio.gather(
+            *(s.aclose() for s in sentinel.sentinels),
+            return_exceptions=True,
+        )
 
-        self.__conn_stop_event.clear()  # 清除标记，代表任务开始
-        logger.success(f"Redis<{self.user}:{self.password}@{self.sentinels}> begin start ...")
-        while self.conn_alive_flag:
-            self.__conn_alive_event.clear()
-            self.__conn_success_event.clear()
-            await self.__init_redis()
-
-            await self.__conn_alive_event.wait()
-            if isinstance(self.__sentinel_manager, Sentinel):
-                logger.warning(
-                    f"Redis<{self.user}:{self.password}@{self.sentinels}> disconnected ... reconnect={self.conn_alive_flag}")
-                sentinel_manager_ = self.__sentinel_manager
-                self.__sentinel_manager = None
-                _ = await asyncio.gather(
-                    *[
-                        redis_.close()
-                        for redis_ in sentinel_manager_.sentinels
-                    ],
-                    return_exceptions=True
-                )
-
-        self.__conn_stop_event.set()  # 标记任务结束
-        self.__conn_success_event.set()
-        self.__conn_alive_event.set()
-        logger.warning(f"Redis<{self.user}:{self.password}@{self.sentinels}> client stopped")
-
-    def __stop(self):
-        if isinstance(self.__conn_success_event, asyncio.Event):
-            self.__conn_success_event.clear()
-        if isinstance(self.__conn_alive_event, asyncio.Event):
-            self.__conn_alive_event.set()
-
-    async def wait_connect(self):
-        if isinstance(self.__conn_success_event, asyncio.Event):
-            await self.__conn_success_event.wait()
-
-    async def wait_stop(self):
-        if isinstance(self.__conn_stop_event, asyncio.Event):
-            await self.__conn_stop_event.wait()
-
-    def start(self):
-        """
-        必须异步启动，但是会额外提交一个__start的task到事件循环中
-        """
-        self.conn_alive_flag = True
-        if not isinstance(self.__conn_stop_event, asyncio.Event):
-            self.__conn_alive_event = asyncio.Event()
-            self.__conn_success_event = asyncio.Event()
-            self.__conn_stop_event = asyncio.Event()
-        # 设置启动初始状态
-        self.__conn_stop_event.set()
-        self.__conn_alive_event.clear()
-        self.__conn_success_event.clear()
-        asyncio.create_task(self.__start())
-
-    def stop(self):
-        self.conn_alive_flag = False
-        logger.warning(f"Call Stop {self}")
-        self.__stop()
-
-    def restart(self):
-        logger.warning(f"Call Restart {self}")
-        self.__stop()
-
-    def get_client(self, node: SentinelNodeEnum):
-        self.__node = node
+    def get_client(self, node: SentinelNodeEnum) -> RedisSentinelClient:
+        self._node = node
         return self
 
-    def client(self, node: SentinelNodeEnum) -> aioredis.Redis:
+    def client(self, node: SentinelNodeEnum) -> aioredis.Redis | None:
         if node == SentinelNodeEnum.master:
-            return self.__master_redis
-        elif node == SentinelNodeEnum.slave:
-            return self.__slave_redis
+            return self._master_redis
+        if node == SentinelNodeEnum.slave:
+            return self._slave_redis
+        return None
 
-    def __enter__(self) -> aioredis.Redis:
-        if not isinstance(self.__sentinel_manager, Sentinel):
+    def _current(self) -> aioredis.Redis | None:
+        if self._sentinel_manager is None:
             return None
-        if self.__node == SentinelNodeEnum.master:
-            return self.__master_redis
-        elif self.__node == SentinelNodeEnum.slave:
-            return self.__slave_redis
+        if self._node == SentinelNodeEnum.master:
+            return self._master_redis
+        if self._node == SentinelNodeEnum.slave:
+            return self._slave_redis
+        return None
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """
-        异常会传递进来，只处理redis连接错误的异常
-        return True 时异常不会传递到使用的地方
-        """
-        if exc_type is None:
-            return False
+    def __enter__(self) -> aioredis.Redis | None:
+        return self._current()
 
-        if isinstance(exc_val, (aioredis.ConnectionError, aioredis.TimeoutError)):
-            logger.error(f"Redis Error {exc_type}:{exc_val}")
-            return True
+    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+        return _handle_redis_exc(exc_type, exc_val, self)
 
-        if isinstance(exc_val, AssertionError):
-            # Redis客户端以及其他的断言错误，抛出AssertionError
-            logger.warning(f"RedisClient -- {exc_type}:{exc_val}")
-            return True
+    async def __aenter__(self) -> aioredis.Redis | None:
+        return self._current()
 
-        return False
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> bool:
+        return _handle_redis_exc(exc_type, exc_val, self)
 
-    async def __aenter__(self) -> aioredis.Redis:
-        if not isinstance(self.__sentinel_manager, Sentinel):
-            return None
-        if self.__node == SentinelNodeEnum.master:
-            return self.__master_redis
-        elif self.__node == SentinelNodeEnum.slave:
-            return self.__slave_redis
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """
-        异常会传递进来，只处理redis连接错误的异常
-        return True 时异常不会传递到使用的地方
-        """
-        if exc_type is None:
-            return False
-
-        if isinstance(exc_val, (aioredis.ConnectionError, aioredis.TimeoutError)):
-            logger.error(f"Redis Error {exc_type}:{exc_val}")
-            return True
-
-        if isinstance(exc_val, AssertionError):
-            # Redis客户端以及其他的断言错误，抛出AssertionError
-            logger.warning(f"RedisClient -- {exc_type}:{exc_val}")
-            return True
-
-        return False
-
-    def __call__(self, key: Union[bytes, str], response: Response, ex_pttl: int = 3000) -> Callable:
-        def decorator_(func: Callable) -> Callable:
+    def __call__(self, key: bytes | str, response: Response, ex_pttl: int = 3000) -> Callable:
+        def decorator(func: Callable) -> Callable:
             @wraps(func)
-            async def cache_wrapper_(*args_, **kwargs_):
-                if isinstance(self.__sentinel_manager, Sentinel):
+            async def wrapper(*args, **kwargs):
+                if self._sentinel_manager is not None:
                     with contextlib.suppress(Exception):
-                        node_client_ = self.__sentinel_manager.slave_for(self.service_name)
-                        value = await node_client_.get(key)
+                        slave = self._sentinel_manager.slave_for(self.service_name)
+                        value = await slave.get(key)
                         if value is not None:
-                            await self.__sentinel_manager.master_for(self.service_name).pexpire(key, ex_pttl)
+                            await self._sentinel_manager.master_for(self.service_name).pexpire(key, ex_pttl)
                             response.body = value
                             return response
-                return await func(*args_, **kwargs_)
+                return await func(*args, **kwargs)
 
-            return cache_wrapper_
+            return wrapper
 
-        return decorator_
+        return decorator
 
-    async def clean_cache_for_route(self, route: str):
+    async def clean_cache_for_route(self, route: str) -> bool:
+        if self._sentinel_manager is None:
+            return False
         try:
-            await self.__sentinel_manager.master_for(self.service_name).eval(
+            await self._sentinel_manager.master_for(self.service_name).eval(
                 CLEAN_LUA_SCRIPT, 0, RedisNamespace.get_all_keys_by_route(route)
             )
-        except Exception as e:
-            logger.error(e)
+        except Exception as exc:
+            logger.error(exc)
             return False
         return True
+
+
+# ---------------------------------------------------------------------------
+# 异常处理工具
+# ---------------------------------------------------------------------------
+def _handle_redis_exc(exc_type, exc_val, owner: _BaseRedisClient, on_conn_err: Callable | None = None) -> bool:
+    if exc_type is None:
+        return False
+    if isinstance(exc_val, (RedisConnectionError, RedisTimeoutError)):
+        logger.error(f"Redis Error {exc_type}:{exc_val}")
+        if on_conn_err is not None:
+            on_conn_err()
+        return True
+    if isinstance(exc_val, AssertionError):
+        logger.warning(f"{owner._label()} -- {exc_type}:{exc_val}")
+        return True
+    return False

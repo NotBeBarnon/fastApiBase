@@ -1,18 +1,15 @@
 # -*- coding: utf-8 -*-
-# @Time    : 2022/3/2:16:52
-# @Author  : fzx
-# @Description :
+from __future__ import annotations
 
 from tortoise import fields, models
 
-# from src.my_tools.regex_tool import chinese_regex
+from src.my_tools.regex_tool import chinese_regex
+
 from . import app_name
 
 
 class User(models.Model):
-    """
-    用户
-    """
+    """用户"""
 
     user_number = fields.IntField(pk=True, description="用户编号")
     uid = fields.CharField(max_length=10, unique=True, description="用户UID，唯一标识用户")
@@ -24,9 +21,6 @@ class User(models.Model):
     modified_at = fields.DatetimeField(auto_now=True, description="修改时间")
 
     def full_name(self) -> str:
-        """
-        用户全名
-        """
         if self.name or self.family_name:
             if chinese_regex.search(f"{self.name}") or chinese_regex.search(f"{self.family_name}"):
                 return f"{self.family_name or ''}{self.name or ''}".strip()

@@ -1,9 +1,2 @@
 # -*- coding: utf-8 -*-
-# @Time    : 2022/3/7:11:08
-# @Author  : fzx
-# @Description :
-
-
-from apscheduler.schedulers.blocking import BlockingScheduler
-
-scheduler = BlockingScheduler()
+# @Description : 定时任务工具入口；scheduler 实例由 lifespan 创建并通过 app.state 暴露

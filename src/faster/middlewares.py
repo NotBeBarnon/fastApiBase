@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Time    : 2022/3/2:15:44
-# @Author  : fzx
-# @Description : FastAPI中间件
+# @Description : FastAPI 中间件（按需添加）
+from __future__ import annotations
 
-__all__ = ()
+__all__: tuple[str, ...] = ()

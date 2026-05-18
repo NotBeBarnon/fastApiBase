@@ -1,4 +1,56 @@
-[tool]
+[project]
+name = "fast-sample"
+version = "1.2.3"
+description = "FastAPI 示例项目"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    # 基础
+    "loguru>=0.7.2",
+    "arrow>=1.3.0",
+    "python-dotenv>=1.0.1",
+    "tomlkit>=0.13.2",
+    "aiohttp>=3.10.10",
+    "construct>=2.10.70",
+    "apscheduler>=3.10.4",
+
+    # FastAPI
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "websockets>=13.1",
+    "anyio>=4.6.0",
+    "orjson>=3.10.7",
+
+    # Pydantic v2
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.5.2",
+
+    # ORM (asyncmy 是 3.12 下 aiomysql 的替代，有 wheel)
+    "tortoise-orm[asyncmy]>=0.21.7",
+
+    # HTTP 客户端
+    "httpx>=0.27.2",
+
+    # Redis（aioredis 已并入 redis>=4.2）
+    "redis>=5.1.1",
+
+    # Kafka
+    "aiokafka>=0.11.0",
+
+    # CLI
+    "typer>=0.12.5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "aerich>=0.7.2",
+    "ruff>=0.6.9",
+    "pytest>=8.3.3",
+    "pytest-asyncio>=0.24.0",
+]
+build = [
+    "cx_Freeze>=7.2.3",
+]
+
 [tool.commitizen]
 name = "cz_conventional_commits"
 version = "1.2.3"
@@ -14,6 +66,14 @@ annotated_tag = true
 tortoise_orm = "src.settings.DATABASE_CONFIG"
 location = "./migrations"
 src_folder = "./."
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
 
 [myproject]
 LOG_LEVEL = "debug"
@@ -31,26 +91,25 @@ user = ""
 password = ""
 namespace = "FastSample"
 
-[myproject.redis.more_config] # aioredis的透传参数
-max_connections = 10  # 连接池数量
-socket_timeout = 1  # 连接超时时间
+[myproject.redis.more_config]
+max_connections = 10
+socket_timeout = 1
 
 [myproject.redis.sentinels]
 service = [["124.223.5.168", 6379], ]
 service_name = "mymaster"
 
 [myproject.mq]
-bootstrap_servers = ["localhost:9092"] # 控制mq的host，如果有环境变量，则此值不起作用
+bootstrap_servers = ["localhost:9092"]
 user = ""
 password = ""
-retry_interval = 5 # mq重连间隔
-num_partitions = 1 # 主题的分区数
-replication_factor = 3 # 主题的备份数量
-# [myproject.mq.replica_assignments] 与num_partitions/replication_factor冲突，不要同时使用
-[myproject.mq.topic_configs] # 主题消息的透传参数
+retry_interval = 5
+num_partitions = 1
+replication_factor = 3
+[myproject.mq.topic_configs]
 "min.insync.replicas" = 2
 
-[myproject.mq.topics] # 程序需要用到的所有主题
+[myproject.mq.topics]
 [myproject.mq.topics.consumer]
 fast_sample = "FAST_SAMPLE"
 [myproject.mq.topics.producer]

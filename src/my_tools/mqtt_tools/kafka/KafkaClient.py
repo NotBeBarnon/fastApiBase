@@ -10,42 +10,40 @@
 """
 kafka 消息队列 (单机使用）
 """
-from typing import Optional, List
+from __future__ import annotations
+
+import asyncio
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer, ConsumerRecord
 from kafka.admin import KafkaAdminClient, NewTopic
 from loguru import logger
-import asyncio
 
 
-class MessageHandler(object):
-    def __init__(self):
-        ...
+class MessageHandler:
+    def __init__(self) -> None: ...
 
     @staticmethod
-    async def message_handler(msg: ConsumerRecord):
+    async def message_handler(msg: ConsumerRecord) -> None:
         print("message from kafak: ", msg.key)
         print(msg.value)
 
 
-class KafkaClient(object):
-    """kafka客户端"""
+class KafkaClient:
+    """kafka 客户端"""
 
     _instance = None
-
-    producer: Optional[AIOKafkaProducer] = None
+    producer: AIOKafkaProducer | None = None
     start_flag_producer: bool = False
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
             cls._instance = object.__new__(cls)
-
         return cls._instance
 
-    def __init__(self, host: str = "124.223.5.168", port: int = 9092):
+    def __init__(self, host: str = "124.223.5.168", port: int = 9092) -> None:
         self._host = host
         self._port = port
-        self.__consumers: List[AIOKafkaConsumer] = []
+        self.__consumers: list[AIOKafkaConsumer] = []
 
     def create_topics(self, topics: list, num_partitions=1, replication_factor=3, min_replicas=2):
         """创建队列主题"""
@@ -101,8 +99,12 @@ class KafkaClient(object):
 
 
 
-if __name__ == '__main__':
+async def _demo() -> None:
     kfk = KafkaClient(host="124.223.5.168")
     kfk.create_topics(topics=["test_topic", "test_fzx"])
-    producer_1 = asyncio.run(kfk.get_producer())
-    await producer_1.send(topic="test_topic", value="123456")
+    producer = await kfk.get_producer()
+    await producer.send(topic="test_topic", value=b"123456")
+
+
+if __name__ == "__main__":
+    asyncio.run(_demo())
