@@ -8,8 +8,8 @@ import random
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from ...my_tools.sse_tools import SSEStream, SSEEvent
-from ...settings import HTTP_BASE_URL
+from src.my_tools.sse_tools import SSEStream, SSEEvent
+from src.settings import HTTP_BASE_URL
 
 sse_router = APIRouter(prefix="/sse", tags=["sse"])
 

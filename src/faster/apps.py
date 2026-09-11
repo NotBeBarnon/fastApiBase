@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from ..settings import HTTP_BASE_URL
 from ..version import VERSION
 from .events import lifespan
+from .middlewares import RequestContextMiddleware
 from .routers import all_router
 
 __all__ = ("fast_app",)
@@ -22,4 +23,5 @@ fast_app = FastAPI(
     lifespan=lifespan,
 )
 
+fast_app.add_middleware(RequestContextMiddleware)
 fast_app.include_router(all_router)

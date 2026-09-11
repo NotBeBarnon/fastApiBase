@@ -5,9 +5,9 @@ from __future__ import annotations
 from fastapi import APIRouter, Request, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from ...my_tools.mcp_tools import ToolRegistry
-from ...my_tools.mcp_tools.server import MCPSSETransport, MCPServer
-from ...version import VERSION
+from src.my_tools.mcp_tools import ToolRegistry
+from src.my_tools.mcp_tools.server import MCPSSETransport, MCPServer
+from src.version import VERSION
 
 __all__ = ("mcp_router",)
 

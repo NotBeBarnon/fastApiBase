@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
-from ...my_tools.observability.health import STATUS_DOWN, build_app_health
+from src.my_tools.observability.health import STATUS_DOWN, build_app_health
 
 monitor_router = APIRouter(prefix="/monitor", tags=["monitor"])
 

@@ -62,6 +62,27 @@ class MQConfig(BaseModel):
     topics: dict = Field(default_factory=dict)
 
 
+class SecurityAPIKeyConfig(BaseModel):
+    key: str
+    role: str = "user"
+
+
+class SecurityRateLimitConfig(BaseModel):
+    enabled: bool = True
+    times: int = 30
+    window_seconds: int = 60
+    key_prefix: str = "rate_limit"
+
+
+class SecurityConfig(BaseModel):
+    auth_enabled: bool = True
+    api_keys: dict[str, SecurityAPIKeyConfig] = Field(default_factory=dict)
+    jwt_secret: str = "fast-sample-secret-change-me"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_seconds: int = 3600
+    rate_limit: SecurityRateLimitConfig = Field(default_factory=SecurityRateLimitConfig)
+
+
 class AppSettings(BaseSettings):
     """
     优先级：环境变量 > project_env > pyproject.toml > 默认值
@@ -137,6 +158,9 @@ _mq_cfg = MQConfig(**_PROJECT_CONFIG.get("mq", {}))
 if settings.FS_KAFKA_SERVICE:
     _mq_cfg.bootstrap_servers = [item.strip() for item in settings.FS_KAFKA_SERVICE.split(",")]
 MQ_CONFIG = _mq_cfg.model_dump()
+
+# 安全配置（API Key / JWT / 限流）
+SECURITY_CONFIG: dict = SecurityConfig(**_PROJECT_CONFIG.get("security", {})).model_dump()
 
 # LLM 配置
 from src.my_tools.llm_tools.config import LLMConfig, LLMProvider  # noqa: E402
