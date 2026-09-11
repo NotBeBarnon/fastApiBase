@@ -114,3 +114,43 @@ replication_factor = 3
 fast_sample = "FAST_SAMPLE"
 [myproject.mq.topics.producer]
 fast_sample = "FAST_SAMPLE"
+
+[myproject.llm]
+default_provider = ""
+fallback_providers = []
+global_timeout = 60
+enable_cost_tracking = true
+
+# LLM 提供商配置示例（按需取消注释并填入真实配置）
+# [myproject.llm.providers.deepseek]
+# name = "deepseek"
+# type = "openai"
+# base_url = "https://api.deepseek.com/v1"
+# api_key = "sk-xxx"
+# default_model = "deepseek-chat"
+# timeout = 60
+# max_retries = 2
+# priority = 100
+# enabled = true
+
+# [myproject.llm.providers.openai]
+# name = "openai"
+# type = "openai"
+# base_url = "https://api.openai.com/v1"
+# api_key = "sk-xxx"
+# default_model = "gpt-4o-mini"
+# timeout = 60
+# max_retries = 2
+# priority = 90
+# enabled = true
+
+# [myproject.llm.providers.anthropic]
+# name = "anthropic"
+# type = "anthropic"
+# base_url = "https://api.anthropic.com/v1"
+# api_key = "sk-ant-xxx"
+# default_model = "claude-3-haiku-20240307"
+# timeout = 60
+# max_retries = 2
+# priority = 80
+# enabled = false

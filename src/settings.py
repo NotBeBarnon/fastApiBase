@@ -138,6 +138,21 @@ if settings.FS_KAFKA_SERVICE:
     _mq_cfg.bootstrap_servers = [item.strip() for item in settings.FS_KAFKA_SERVICE.split(",")]
 MQ_CONFIG = _mq_cfg.model_dump()
 
+# LLM 配置
+from src.my_tools.llm_tools.config import LLMConfig, LLMProvider  # noqa: E402
+
+_llm_raw = _PROJECT_CONFIG.get("llm", {})
+_llm_providers = {}
+for _name, _prov in _llm_raw.get("providers", {}).items():
+    _llm_providers[_name] = LLMProvider(**_prov)
+LLM_CONFIG = LLMConfig(
+    default_provider=_llm_raw.get("default_provider", ""),
+    fallback_providers=_llm_raw.get("fallback_providers", []),
+    providers=_llm_providers,
+    global_timeout=_llm_raw.get("global_timeout", 60),
+    enable_cost_tracking=_llm_raw.get("enable_cost_tracking", True),
+)
+
 # 项目级配置（兼容老代码）
 PROJECT_CONFIG = _PROJECT_CONFIG
 

@@ -7,6 +7,7 @@ from loguru import logger
 from pydantic import BaseModel
 
 from ...settings import HTTP_BASE_URL
+from .llm import llm_router
 from .mcp import mcp_router
 from .resource.routers import resource_router
 from .sse import sse_router
@@ -19,6 +20,7 @@ all_router.include_router(user_router)
 all_router.include_router(resource_router)
 all_router.include_router(mcp_router)
 all_router.include_router(sse_router)
+all_router.include_router(llm_router)
 
 
 class FastAPIStatus(BaseModel):

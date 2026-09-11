@@ -60,6 +60,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.scheduler = scheduler
     logger.debug("Scheduler started")
 
+    # 4. LLM 网关
+    from ..my_tools.llm_tools import LLMGateway
+    from ..settings import LLM_CONFIG
+
+    llm_gateway = LLMGateway(LLM_CONFIG)
+    app.state.llm = llm_gateway
+    logger.info(f"LLM Gateway started: {list(LLM_CONFIG.providers.keys()) or '(no providers)'}")
+
     try:
         yield
     finally:
