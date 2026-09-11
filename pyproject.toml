@@ -1,7 +1,8 @@
 [project]
-name = "fast-sample"
+name = "fastapi-ai-starter"
 version = "2.0.0"
-description = "FastAPI 示例项目"
+description = "面向 AI 应用的生产级 FastAPI 后端启动模板：LLM 多模型网关、MCP 工具生态、SSE 流式响应、可观测性、安全限流、容器化 CI/CD 开箱即用"
+readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     # 基础
