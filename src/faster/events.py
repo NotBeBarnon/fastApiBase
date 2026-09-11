@@ -29,6 +29,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await Tortoise.init(config=DATABASE_CONFIG)
     logger.info(f"Tortoise-ORM started: {Tortoise.apps}")
 
+    # 1.5 注册 MCP 示例工具
+    from ..my_tools.mcp_tools.examples import register_example_tools
+
+    register_example_tools()
+    logger.info("MCP example tools registered")
+
     # 2. Redis 哨兵客户端
     redis_client = RedisSentinelClient(
         sentinels=REDIS_CONFIG["sentinels"]["service"],
