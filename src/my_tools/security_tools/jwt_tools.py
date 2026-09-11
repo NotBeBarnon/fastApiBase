@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : 零依赖 JWT 编解码（stdlib hmac/base64/json 实现 HS256/HS384/HS512）
 from __future__ import annotations
 

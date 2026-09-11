@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : 单例工具
 from __future__ import annotations
 

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : CBV 基类（基于元类的自动 CRUD + 路由注册）
 from __future__ import annotations
 

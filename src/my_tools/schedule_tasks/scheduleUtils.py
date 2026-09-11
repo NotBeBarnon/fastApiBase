@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : 定时任务函数。Scheduler 实例由 events.lifespan 创建并注入 app.state。
 from __future__ import annotations
 

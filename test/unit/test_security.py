@@ -1,10 +1,8 @@
-# -*- coding: utf-8 -*-
 # @Description : 里程碑 5 单元测试（JWT / API Key / 限流 / 请求 ID 中间件）
 from __future__ import annotations
 
 import asyncio
 import sys
-import time
 
 import httpx
 from fastapi import FastAPI

@@ -73,7 +73,8 @@ line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM"]
-ignore = ["E501"]
+# B008: FastAPI 惯例，Depends()/Default() 作为参数默认值
+ignore = ["E501", "B008"]
 
 [myproject]
 LOG_LEVEL = "debug"

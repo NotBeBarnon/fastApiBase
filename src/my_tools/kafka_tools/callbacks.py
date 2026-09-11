@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : Kafka 消费回调基类
 from __future__ import annotations
 

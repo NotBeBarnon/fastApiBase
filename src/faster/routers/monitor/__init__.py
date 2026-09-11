@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : 监控端点（liveness / readiness 探针 + Prometheus 指标）
 from __future__ import annotations
 

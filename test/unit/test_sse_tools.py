@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : SSE 流式响应工具测试
 from __future__ import annotations
 
@@ -10,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parents[2]))
 
 from src.my_tools.sse_tools import SSEEvent, SSEStream
-from src.my_tools.sse_tools.llm_streamer import LLMChunk, LLMStreamFormat, LLMStreamer
+from src.my_tools.sse_tools.llm_streamer import LLMChunk, LLMStreamer, LLMStreamFormat
 
 
 def test_sse_event_format():
@@ -29,7 +28,7 @@ def test_sse_event_format():
     out = e.format()
     assert "data: " in out
     # 应该是合法 JSON
-    data_line = [l for l in out.split("\n") if l.startswith("data: ")][0]
+    data_line = [line for line in out.split("\n") if line.startswith("data: ")][0]
     obj = json.loads(data_line[6:])
     assert obj["key"] == "值"
     assert obj["num"] == 42

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : 请求上下文中间件（请求 ID 透传 + 结构化访问日志）
 from __future__ import annotations
 

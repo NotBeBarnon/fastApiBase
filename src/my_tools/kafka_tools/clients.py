@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : Kafka 客户端（aiokafka，自动重连 + 自动建主题）
 from __future__ import annotations
 

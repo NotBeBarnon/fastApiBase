@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : cx_Freeze 编译脚本（Python 3.12）
 from __future__ import annotations
 

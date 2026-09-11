@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : 健康检查探针（DB / Redis / Kafka / LLM）与状态聚合
 from __future__ import annotations
 
@@ -125,7 +124,7 @@ async def check_kafka(bootstrap_servers: Any, timeout: float = 2.0) -> Component
     start = time.perf_counter()
     results = await asyncio.gather(*(_tcp_reachable(s, timeout) for s in servers))
     latency = (time.perf_counter() - start) * 1000
-    reachable = [s for s, ok in zip(servers, results) if ok]
+    reachable = [s for s, ok in zip(servers, results, strict=True) if ok]
     if reachable:
         return ComponentHealth(
             "kafka", STATUS_UP, latency, f"reachable: {','.join(reachable)}", required=False

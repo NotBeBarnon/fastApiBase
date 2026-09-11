@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Time    : 2022/3/3:19:03
 # @Author  : fzx
 # @Description :kafka客户端

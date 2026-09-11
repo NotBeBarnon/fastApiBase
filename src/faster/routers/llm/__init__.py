@@ -1,9 +1,7 @@
-# -*- coding: utf-8 -*-
 # @Description : LLM 网关示例路由
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from src.my_tools.llm_tools import LLMMessage

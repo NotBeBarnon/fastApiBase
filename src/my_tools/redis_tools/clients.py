@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : Redis 客户端（redis>=5.0，asyncio + 哨兵）
 from __future__ import annotations
 
@@ -7,7 +6,7 @@ import contextlib
 import hashlib
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from functools import wraps
 from typing import Any
 
@@ -271,7 +270,7 @@ class RedisClient(_BaseRedisClient):
 # ---------------------------------------------------------------------------
 # 哨兵客户端
 # ---------------------------------------------------------------------------
-class SentinelNodeEnum(str, Enum):
+class SentinelNodeEnum(StrEnum):
     master = "MASTER"
     slave = "SLAVE"
 

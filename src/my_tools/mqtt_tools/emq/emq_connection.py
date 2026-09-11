@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : emqx 连接（占位实现）
 from __future__ import annotations
 

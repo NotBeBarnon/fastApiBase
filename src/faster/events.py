@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : FastAPI 生命周期（lifespan）
 from __future__ import annotations
 
@@ -12,7 +11,7 @@ from fastapi import FastAPI
 from loguru import logger
 from tortoise import Tortoise
 
-from ..my_tools.redis_tools.clients import RedisSentinelClient
+from ..my_tools.redis_tools.clients import RedisClient, RedisSentinelClient
 from ..my_tools.schedule_tasks.scheduleUtils import quarterly_task
 from ..settings import DATABASE_CONFIG, DEFAULT_TIMEZONE, REDIS_CONFIG
 
@@ -25,9 +24,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     logger.info("Startup: initializing resources")
 
-    # 1. Tortoise ORM
-    await Tortoise.init(config=DATABASE_CONFIG)
-    logger.info(f"Tortoise-ORM started: {Tortoise.apps}")
+    # 1. Tortoise ORM（未配置任何 app 时跳过初始化，等模型注册后再启用）
+    if DATABASE_CONFIG["apps"]:
+        await Tortoise.init(config=DATABASE_CONFIG)
+        logger.info(f"Tortoise-ORM started: {Tortoise.apps}")
+    else:
+        logger.warning("Tortoise-ORM skipped: no apps configured in DATABASE_CONFIG")
 
     # 1.5 注册 MCP 示例工具
     from ..my_tools.mcp_tools.examples import register_example_tools
@@ -35,15 +37,26 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     register_example_tools()
     logger.info("MCP example tools registered")
 
-    # 2. Redis 哨兵客户端
-    redis_client = RedisSentinelClient(
-        sentinels=REDIS_CONFIG["sentinels"]["service"],
-        service_name=REDIS_CONFIG["sentinels"]["service_name"],
-        db=REDIS_CONFIG["db"],
-        user=REDIS_CONFIG["user"],
-        password=REDIS_CONFIG["password"],
-        retry_interval=REDIS_CONFIG["retry_interval"],
-    )
+    # 2. Redis 客户端（配置了哨兵则用哨兵模式，否则单连接模式）
+    if REDIS_CONFIG["sentinels"]["service"]:
+        redis_client: RedisClient | RedisSentinelClient = RedisSentinelClient(
+            sentinels=REDIS_CONFIG["sentinels"]["service"],
+            service_name=REDIS_CONFIG["sentinels"]["service_name"],
+            db=REDIS_CONFIG["db"],
+            user=REDIS_CONFIG["user"],
+            password=REDIS_CONFIG["password"],
+            retry_interval=REDIS_CONFIG["retry_interval"],
+        )
+    else:
+        redis_client = RedisClient(
+            REDIS_CONFIG["host"],
+            REDIS_CONFIG["port"],
+            REDIS_CONFIG["db"],
+            user=REDIS_CONFIG["user"],
+            password=REDIS_CONFIG["password"],
+            retry_interval=REDIS_CONFIG["retry_interval"],
+            **REDIS_CONFIG["more_config"],
+        )
     redis_client.start()
     with contextlib.suppress(asyncio.TimeoutError):
         async with asyncio.timeout(3):

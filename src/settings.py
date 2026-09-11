@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : 项目配置（Python 3.12 + pydantic-settings v2）
 from __future__ import annotations
 
@@ -145,9 +144,14 @@ if settings.FS_REDIS_HOST:
 if settings.FS_REDIS_PORT:
     _redis_cfg.port = settings.FS_REDIS_PORT
 if settings.FS_REDIS_SENTINEL_SERVICE:
-    _redis_cfg.sentinels.service = [
-        (host.strip(), int(port)) for host, port in (item.split(":") for item in settings.FS_REDIS_SENTINEL_SERVICE.split(","))
-    ]
+    _sentinel_value = settings.FS_REDIS_SENTINEL_SERVICE.strip().lower()
+    if _sentinel_value in ("none", "off", "disabled"):
+        # 容器/本地单实例场景：禁用哨兵，走单连接模式
+        _redis_cfg.sentinels.service = []
+    else:
+        _redis_cfg.sentinels.service = [
+            (host.strip(), int(port)) for host, port in (item.split(":") for item in settings.FS_REDIS_SENTINEL_SERVICE.split(","))
+        ]
 if settings.FS_REDIS_SENTINEL_SERVICE_NAME:
     _redis_cfg.sentinels.service_name = settings.FS_REDIS_SENTINEL_SERVICE_NAME
 

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : MCP 工具数据模型（Pydantic v2）
 from __future__ import annotations
 

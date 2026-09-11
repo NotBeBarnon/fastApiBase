@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : LLM 网关测试（用 mock HTTP 响应）
 from __future__ import annotations
 
@@ -9,7 +8,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parents[2]))
 
-from src.my_tools.llm_tools import LLMGateway, LLMConfig, LLMMessage, LLMResponse, LLMUsage, LLMProvider, ProviderType
+from src.my_tools.llm_tools import LLMConfig, LLMGateway, LLMMessage, LLMProvider, LLMResponse, LLMUsage, ProviderType
 
 
 def make_config() -> LLMConfig:

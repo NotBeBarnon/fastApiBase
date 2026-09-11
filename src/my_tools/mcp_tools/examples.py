@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : MCP 工具示例（演示 @mcp_tool 装饰器的用法）
 from __future__ import annotations
 

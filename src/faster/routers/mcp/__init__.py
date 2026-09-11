@@ -1,12 +1,11 @@
-# -*- coding: utf-8 -*-
 # @Description : MCP Server 路由（SSE 传输 + 消息提交）
 from __future__ import annotations
 
-from fastapi import APIRouter, Request, Query
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from src.my_tools.mcp_tools import ToolRegistry
-from src.my_tools.mcp_tools.server import MCPSSETransport, MCPServer
+from src.my_tools.mcp_tools.server import MCPServer, MCPSSETransport
 from src.version import VERSION
 
 __all__ = ("mcp_router",)

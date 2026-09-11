@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : 工具注册表 + @mcp_tool 装饰器（零依赖，纯 Python）
 from __future__ import annotations
 
@@ -94,13 +93,13 @@ class ToolRegistry:
     - 调用工具：call(name, kwargs)
     """
 
-    _instance: "ToolRegistry | None" = None
+    _instance: ToolRegistry | None = None
 
     def __init__(self) -> None:
         self._tools: dict[str, MCPTool] = {}
 
     @classmethod
-    def get_instance(cls) -> "ToolRegistry":
+    def get_instance(cls) -> ToolRegistry:
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance

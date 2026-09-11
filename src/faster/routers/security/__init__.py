@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : 安全能力演示路由（JWT 签发 / API Key / 限流）
 from __future__ import annotations
 

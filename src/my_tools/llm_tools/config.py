@@ -1,14 +1,13 @@
-# -*- coding: utf-8 -*-
 # @Description : LLM 网关配置模型
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class ProviderType(str, Enum):
+class ProviderType(StrEnum):
     """支持的模型厂商类型"""
 
     OPENAI = "openai"          # OpenAI 兼容（DeepSeek / 通义 / 豆包 / Kimi 等都兼容）

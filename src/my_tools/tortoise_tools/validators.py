@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : Tortoise 字段验证器
 from __future__ import annotations
 

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : FastAPI 鉴权依赖（API Key + JWT Bearer）
 from __future__ import annotations
 

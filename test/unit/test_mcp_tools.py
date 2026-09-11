@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : MCP 功能验证脚本（不启动服务，直接测核心逻辑）
 from __future__ import annotations
 

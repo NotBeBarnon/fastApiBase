@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : FastAPI 应用实例
 from __future__ import annotations
 

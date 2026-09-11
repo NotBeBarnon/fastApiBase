@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : 安全工具集（鉴权 / 限流 / JWT）
 from .auth import APIKeyInfo, require_api_key, verify_api_key, verify_jwt
 from .jwt_tools import TokenError, create_token, decode_token

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : FastAPI Action 装饰器（HTTP 方法路由元数据载体）
 from __future__ import annotations
 
@@ -86,25 +85,25 @@ class Action:
 
     # —— 静态方法工厂 ——
     @staticmethod
-    def _make(method: str, path: str, **kw) -> "Action":
+    def _make(method: str, path: str, **kw) -> Action:
         return Action(path, methods=[method], **kw)
 
     @staticmethod
-    def get(path: str, **kw) -> "Action":
+    def get(path: str, **kw) -> Action:
         return Action._make("GET", path, **kw)
 
     @staticmethod
-    def post(path: str, **kw) -> "Action":
+    def post(path: str, **kw) -> Action:
         return Action._make("POST", path, **kw)
 
     @staticmethod
-    def put(path: str, **kw) -> "Action":
+    def put(path: str, **kw) -> Action:
         return Action._make("PUT", path, **kw)
 
     @staticmethod
-    def patch(path: str, **kw) -> "Action":
+    def patch(path: str, **kw) -> Action:
         return Action._make("PATCH", path, **kw)
 
     @staticmethod
-    def delete(path: str, **kw) -> "Action":
+    def delete(path: str, **kw) -> Action:
         return Action._make("DELETE", path, **kw)

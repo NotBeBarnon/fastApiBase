@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : SSE 流式响应示例路由
 from __future__ import annotations
 
@@ -8,8 +7,7 @@ import random
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from src.my_tools.sse_tools import SSEStream, SSEEvent
-from src.settings import HTTP_BASE_URL
+from src.my_tools.sse_tools import SSEEvent, SSEStream
 
 sse_router = APIRouter(prefix="/sse", tags=["sse"])
 

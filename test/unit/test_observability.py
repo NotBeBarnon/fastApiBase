@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : 可观测性模块测试（指标 / 追踪 / 健康探针 / 网关埋点）
 from __future__ import annotations
 
@@ -10,11 +9,11 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parents[2]))
 
-from src.my_tools.llm_tools import LLMGateway, LLMConfig, LLMMessage, LLMResponse, LLMUsage, LLMProvider, ProviderType
+from src.my_tools.llm_tools import LLMConfig, LLMGateway, LLMMessage, LLMProvider, LLMResponse, LLMUsage, ProviderType
 from src.my_tools.observability.health import (
-    ComponentHealth,
     STATUS_DOWN,
     STATUS_UP,
+    ComponentHealth,
     build_app_health,
     check_kafka,
     check_llm,

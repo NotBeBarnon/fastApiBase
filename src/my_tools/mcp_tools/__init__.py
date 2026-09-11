@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : MCP / Function Calling 工具生态（零额外依赖）
 from __future__ import annotations
 

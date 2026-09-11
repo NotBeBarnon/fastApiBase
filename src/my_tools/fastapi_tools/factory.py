@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : 自动生成基础 CRUD 视图（Pydantic v2 + Tortoise 0.21+）
 from __future__ import annotations
 

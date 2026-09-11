@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : MCP 协议服务器（零依赖，支持 SSE 和 stdio 两种传输）
 # 协议参考：https://modelcontextprotocol.io/specification
 from __future__ import annotations

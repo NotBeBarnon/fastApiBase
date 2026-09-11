@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : SSE 流式响应基础组件
 from __future__ import annotations
 
@@ -6,7 +5,7 @@ import asyncio
 import json
 import time
 from collections.abc import AsyncGenerator, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from fastapi.responses import StreamingResponse
@@ -145,7 +144,7 @@ class SSEStream:
                     if event is None:  # 关闭信号
                         break
                     yield event.format()
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # 心跳
                     yield SSEEvent(data="ping", event="heartbeat").format()
         except asyncio.CancelledError:

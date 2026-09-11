@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : 滑动窗口限流（Redis ZSET + Lua 原子操作，Redis 不可用时降级进程内存窗口）
 from __future__ import annotations
 

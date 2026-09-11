@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : FastAPI 应用层（fast_app 惰性导出，避免导入子模块时拉起 events/apscheduler 等重依赖）
 from __future__ import annotations
 

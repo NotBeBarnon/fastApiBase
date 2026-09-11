@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : 可观测性模块（健康检查 / 指标 / 追踪）
 from __future__ import annotations
 

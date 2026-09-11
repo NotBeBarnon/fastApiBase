@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : 轻量指标采集（计数器 / 费用 / Token / 延迟直方图 + Prometheus 渲染）
 from __future__ import annotations
 

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # @Description : LLM 调用链路追踪（结构化日志 + trace_id 透传）
 from __future__ import annotations
 
