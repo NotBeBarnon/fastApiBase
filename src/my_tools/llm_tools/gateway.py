@@ -11,6 +11,8 @@ from typing import Any
 
 from loguru import logger
 
+from ..observability.metrics import LLMMetrics
+from ..observability.tracing import trace_llm_call
 from .config import LLMConfig, LLMProvider, ProviderType
 
 __all__ = ("LLMGateway", "LLMResponse", "LLMMessage")
@@ -112,6 +114,7 @@ class LLMGateway:
         self._clients: dict[str, Any] = {}
         self._cost_total: float = 0.0
         self._call_count: int = 0
+        self.metrics = LLMMetrics()
 
         # 初始化 provider
         for name, prov in config.providers.items():
@@ -188,16 +191,25 @@ class LLMGateway:
         if prov is None:
             raise ValueError(f"Provider not found: {prov_name}")
 
-        async for chunk in self._stream_chat_provider(
-            prov,
-            messages=messages,
-            model=model or prov.default_model,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            tools=tools,
-            **kwargs,
-        ):
-            yield chunk
+        model_name = model or prov.default_model
+        start = time.time()
+        async with trace_llm_call("stream_chat", provider=prov_name, model=model_name):
+            try:
+                async for chunk in self._stream_chat_provider(
+                    prov,
+                    messages=messages,
+                    model=model,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    tools=tools,
+                    **kwargs,
+                ):
+                    yield chunk
+            except Exception:
+                self.metrics.record(prov_name, success=False, latency_ms=(time.time() - start) * 1000)
+                raise
+            else:
+                self.metrics.record(prov_name, success=True, latency_ms=(time.time() - start) * 1000)
 
     async def embeddings(
         self,
@@ -225,20 +237,41 @@ class LLMGateway:
         provider = kwargs.pop("provider", None) or self.config.default_provider
         fallback_chain = [provider] + [p for p in self.config.fallback_providers if p != provider]
 
+        start = time.time()
+        tried = 0
         last_exc: Exception | None = None
-        for prov_name in fallback_chain:
-            prov = self._providers.get(prov_name)
-            if prov is None or not prov.enabled:
-                continue
-            try:
-                result = await self._call_provider(prov, method, **kwargs)
-                if hasattr(result, "provider"):
-                    result.provider = prov_name
-                return result
-            except Exception as exc:
-                logger.warning(f"LLM provider '{prov_name}' failed: {exc}")
-                last_exc = exc
-                continue
+        async with trace_llm_call(method, provider=provider):
+            for prov_name in fallback_chain:
+                prov = self._providers.get(prov_name)
+                if prov is None or not prov.enabled:
+                    continue
+                tried += 1
+                if tried > 1:
+                    self.metrics.record_fallback(prov_name)
+                    logger.warning(f"LLM fallback -> '{prov_name}'")
+                try:
+                    result = await self._call_provider(prov, method, **kwargs)
+                    if hasattr(result, "provider"):
+                        result.provider = prov_name
+                    self.metrics.record(
+                        prov_name,
+                        success=True,
+                        latency_ms=(time.time() - start) * 1000,
+                        prompt_tokens=getattr(getattr(result, "usage", None), "prompt_tokens", 0),
+                        completion_tokens=getattr(getattr(result, "usage", None), "completion_tokens", 0),
+                        total_tokens=getattr(getattr(result, "usage", None), "total_tokens", 0),
+                        cost=getattr(getattr(result, "usage", None), "cost_estimate", 0.0),
+                    )
+                    return result
+                except Exception as exc:
+                    logger.warning(f"LLM provider '{prov_name}' failed: {exc}")
+                    self.metrics.record(
+                        prov_name,
+                        success=False,
+                        latency_ms=(time.time() - start) * 1000,
+                    )
+                    last_exc = exc
+                    continue
 
         raise RuntimeError(f"All LLM providers failed. Last error: {last_exc}")
 
@@ -255,6 +288,7 @@ class LLMGateway:
             except Exception as exc:
                 if attempt < prov.max_retries:
                     wait = 0.5 * (2 ** attempt)
+                    self.metrics.record_retry(prov.name)
                     logger.warning(f"LLM '{prov.name}' attempt {attempt+1} failed, retry in {wait}s: {exc}")
                     await asyncio.sleep(wait)
                 else:
@@ -330,7 +364,6 @@ class LLMGateway:
             raw=data,
         )
 
-        self._record_call(usage)
         return result
 
     async def _stream_chat_provider(
@@ -428,32 +461,65 @@ class LLMGateway:
     # ================================================================
 
     def _record_call(self, usage: LLMUsage) -> None:
-        self._call_count += 1
-        if self.config.enable_cost_tracking:
-            self._cost_total += usage.cost_estimate
+        """兼容旧接口：统一由 metrics 采集，这里不再重复计数。"""
 
     @property
     def call_count(self) -> int:
-        """累计调用次数"""
-        return self._call_count
+        """累计调用次数（成功 + 失败）"""
+        return self.metrics.calls
 
     @property
     def cost_total(self) -> float:
         """累计费用估算（美元）"""
-        return self._cost_total
+        return round(self.metrics.cost_total, 6)
 
     def get_stats(self) -> dict:
-        """获取网关统计信息"""
+        """获取网关统计信息（含延迟分位数、错误率、按 provider 拆分）"""
         return {
-            "call_count": self._call_count,
-            "cost_total_usd": round(self._cost_total, 6),
+            "call_count": self.metrics.calls,
+            "cost_total_usd": round(self.metrics.cost_total, 6),
             "providers": list(self._providers.keys()),
             "default_provider": self.config.default_provider,
             "enabled_providers": {
                 name: {"type": p.type.value, "model": p.default_model, "priority": p.priority}
                 for name, p in self._providers.items()
             },
+            "metrics": self.metrics.snapshot(),
         }
+
+    async def ping(self) -> dict[str, Any]:
+        """
+        深度健康检查：实际请求各 provider 的模型列表端点（GET /models）。
+
+        Returns:
+            {provider_name: {"ok": bool, "latency_ms": float, "error": str}}
+        """
+        import httpx
+
+        async def _ping_one(name: str, prov: LLMProvider) -> tuple[str, dict[str, Any]]:
+            start = time.time()
+            url = f"{prov.base_url.rstrip('/')}/models"
+            headers: dict[str, str] = {}
+            if prov.type == ProviderType.AZURE:
+                headers["api-key"] = prov.api_key
+            else:
+                headers["Authorization"] = f"Bearer {prov.api_key}"
+            try:
+                async with httpx.AsyncClient(timeout=prov.timeout or self.config.global_timeout) as client:
+                    resp = await client.get(url, headers=headers)
+                    resp.raise_for_status()
+                return name, {"ok": True, "latency_ms": round((time.time() - start) * 1000, 2), "error": ""}
+            except Exception as exc:
+                return name, {
+                    "ok": False,
+                    "latency_ms": round((time.time() - start) * 1000, 2),
+                    "error": f"{exc.__class__.__name__}: {exc}",
+                }
+
+        results = await asyncio.gather(
+            *(_ping_one(name, prov) for name, prov in self._providers.items())
+        )
+        return {name: info for name, info in results}
 
     def health_check(self) -> dict:
         """健康检查：各 provider 连通性"""
