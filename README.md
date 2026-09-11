@@ -17,11 +17,12 @@
 | 🔀 **LLM 多模型网关** | 多 provider 优先级降级、指数退避重试、Token / 成本统计、OpenAI / DeepSeek / Claude / Ollama 统一接口 | `POST /llm/chat`、`POST /llm/stream` |
 | 🔧 **MCP 工具生态** | 工具注册中心 + JSON-RPC Server（SSE / stdio 双传输），直接接入 Claude Desktop、Cline 等 AI 客户端 | `GET /mcp/sse` |
 | 🌊 **SSE 流式响应** | SSEStream（队列 / 生成器模式）、LLMStreamer（OpenAI 兼容流式输出） | `GET /sse/chat` |
+| 📨 **Kafka 消息链路** | 自动重连 + 自动建 topic 的 producer/consumer、EventPublisher 事件发布封装、回调式后台消费 worker | `POST /kafka/publish`、`GET /kafka/status` |
 | 📊 **可观测性** | DB / Redis / Kafka / LLM 四类健康探针、Prometheus 指标（P50-P99 延迟 / Token / 成本）、trace_id 结构化追踪 | `/monitor/healthz`、`/readyz`、`/metrics` |
 | 🔐 **安全与限流** | 零依赖 HS256 JWT、API Key 鉴权（角色校验）、Redis Lua 滑动窗口限流（内存兜底）、请求 ID 链路 | `POST /security/token`、`GET /security/limited` |
 | 🚀 **DevOps** | 多阶段 Dockerfile、docker-compose 一键编排（MySQL + Redis + 可选 Kafka）、GitHub Actions 自动回归 | `docker compose up -d` |
 
-所有端点自带 Swagger 文档（`/docs`），51 项单元测试全量覆盖，CI 每次 push 自动回归。
+所有端点自带 Swagger 文档（`/docs`），59 项单元测试全量覆盖，CI 每次 push 自动回归。
 
 ## 0 快速上手
 
@@ -121,8 +122,11 @@ python main.py run --reload   # 开发热重载
 | `FS_REDIS_HOST/PORT` | Redis 地址 |
 | `FS_REDIS_SENTINEL_SERVICE` | 哨兵地址列表；设为 `none` 走单连接模式 |
 | `FS_KAFKA_SERVICE` | Kafka bootstrap servers |
+| `FS_KAFKA_ENABLED` | 设为 `true` 启用 Kafka 链路（默认关闭） |
 
 LLM 提供商在 `[myproject.llm.providers]` 配置（DeepSeek / OpenAI / Anthropic / Ollama 等 OpenAI 兼容接口），API Key 建议通过环境变量注入后写入。
+
+Kafka 链路默认关闭，启用方式（二选一）：`[myproject.mq] enabled = true` 或环境变量 `FS_KAFKA_ENABLED=true`。启用后 lifespan 自动挂载 producer（自动重连 + 自动建 topic）、启动回调式后台消费 worker，并纳入 `/monitor/readyz` 探针；通过 `POST /kafka/publish` 发布消息、`GET /kafka/status` 查看链路状态。消费回调继承 `BaseTopicCallSingle` 并在 `my_tools/kafka_tools/examples.py` 的 `get_consumer_callbacks()` 中注册即可。
 
 安全配置见 `[myproject.security]`（API Key 表 / JWT 密钥 / 限流参数）——**生产环境务必修改默认 jwt_secret**。
 
@@ -203,7 +207,7 @@ docker run -p 8080:8080 fastapi-ai-starter:latest
 
 推送到 main 或提交 PR 时，[GitHub Actions](./.github/workflows/ci.yml) 自动执行：
 - **lint**：ruff 全量检查
-- **test**：51 项单元测试回归（MCP / SSE / LLM 网关 / 可观测性 / 安全限流）
+- **test**：59 项单元测试回归（MCP / SSE / LLM 网关 / 可观测性 / 安全限流 / Kafka 链路）
 
 ### 4.4 预编译发布（可选）
 

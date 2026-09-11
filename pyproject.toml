@@ -102,6 +102,7 @@ service = [["124.223.5.168", 6379], ]
 service_name = "mymaster"
 
 [myproject.mq]
+enabled = false
 bootstrap_servers = ["localhost:9092"]
 user = ""
 password = ""

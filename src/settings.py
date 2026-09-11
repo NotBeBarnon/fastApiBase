@@ -51,6 +51,7 @@ class RedisConfig(BaseModel):
 
 
 class MQConfig(BaseModel):
+    enabled: bool = False
     bootstrap_servers: list[str] = Field(default_factory=lambda: ["localhost:9092"])
     user: str = ""
     password: str = ""
@@ -115,6 +116,7 @@ class AppSettings(BaseSettings):
     FS_REDIS_SENTINEL_SERVICE: str | None = None
     FS_REDIS_SENTINEL_SERVICE_NAME: str | None = None
     FS_KAFKA_SERVICE: str | None = None
+    FS_KAFKA_ENABLED: bool | None = None
 
 
 settings = AppSettings()
@@ -161,6 +163,8 @@ REDIS_CONFIG = _redis_cfg.model_dump()
 _mq_cfg = MQConfig(**_PROJECT_CONFIG.get("mq", {}))
 if settings.FS_KAFKA_SERVICE:
     _mq_cfg.bootstrap_servers = [item.strip() for item in settings.FS_KAFKA_SERVICE.split(",")]
+if settings.FS_KAFKA_ENABLED is not None:
+    _mq_cfg.enabled = settings.FS_KAFKA_ENABLED
 MQ_CONFIG = _mq_cfg.model_dump()
 
 # 安全配置（API Key / JWT / 限流）

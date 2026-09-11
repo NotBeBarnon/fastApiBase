@@ -13,7 +13,7 @@ from tortoise import Tortoise
 
 from ..my_tools.redis_tools.clients import RedisClient, RedisSentinelClient
 from ..my_tools.schedule_tasks.scheduleUtils import quarterly_task
-from ..settings import DATABASE_CONFIG, DEFAULT_TIMEZONE, REDIS_CONFIG
+from ..settings import DATABASE_CONFIG, DEFAULT_TIMEZONE, MQ_CONFIG, REDIS_CONFIG
 
 __all__ = ("lifespan",)
 
@@ -73,6 +73,44 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.scheduler = scheduler
     logger.debug("Scheduler started")
 
+    # 3.5 Kafka（默认关闭，[myproject.mq] enabled 或 FS_KAFKA_ENABLED 开启；
+    #     延迟导入避免未安装 aiokafka 的环境加载失败）
+    kafka_producer = None
+    kafka_consumer = None
+    if MQ_CONFIG["enabled"]:
+        from ..my_tools.kafka_tools import EventPublisher
+        from ..my_tools.kafka_tools.clients import KafkaConsumerClient, KafkaProducerClient
+        from ..my_tools.kafka_tools.examples import get_consumer_callbacks
+
+        kafka_producer = KafkaProducerClient(
+            MQ_CONFIG["bootstrap_servers"],
+            user=MQ_CONFIG["user"] or None,
+            password=MQ_CONFIG["password"] or None,
+            retry_interval=MQ_CONFIG["retry_interval"],
+        )
+        kafka_producer.start()
+        with contextlib.suppress(asyncio.TimeoutError):
+            async with asyncio.timeout(3):
+                await kafka_producer.wait_connect()
+
+        kafka_consumer = KafkaConsumerClient(
+            MQ_CONFIG["bootstrap_servers"],
+            user=MQ_CONFIG["user"] or None,
+            password=MQ_CONFIG["password"] or None,
+            group="fastapi-ai-starter",
+            retry_interval=MQ_CONFIG["retry_interval"],
+        )
+        kafka_consumer.register_callbacks(get_consumer_callbacks())
+        kafka_consumer.start()
+
+        app.state.kafka_publisher = EventPublisher(kafka_producer)
+        logger.info(f"Kafka started: {MQ_CONFIG['bootstrap_servers']}")
+    else:
+        app.state.kafka_publisher = None
+    # 挂到 state 供 /readyz 探针与业务路由取用
+    app.state.kafka = kafka_producer
+    app.state.kafka_consumer = kafka_consumer
+
     # 4. LLM 网关
     from ..my_tools.llm_tools import LLMGateway
     from ..settings import LLM_CONFIG
@@ -86,6 +124,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     finally:
         logger.info("Shutdown: releasing resources")
         scheduler.shutdown(wait=False)
+        if kafka_producer is not None:
+            kafka_producer.stop()
+        if kafka_consumer is not None:
+            kafka_consumer.stop()
         redis_client.stop()
         await Tortoise.close_connections()
         logger.info("Tortoise-ORM shutdown")
