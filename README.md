@@ -6,6 +6,7 @@
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg)](#4-容器化部署)
 [![CI](https://img.shields.io/badge/ci-github%20actions-2088FF.svg)](./.github/workflows/ci.yml)
 [![Tests](https://img.shields.io/badge/tests-74%20passed-brightgreen.svg)](#-测试覆盖)
+[![License](https://img.shields.io/badge/license-MIT-yellow.svg)](./LICENSE)
 
 <p align="center">
   <img src="./docs/social-preview.png" alt="FastAPI AI Starter" width="100%">
