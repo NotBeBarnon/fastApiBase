@@ -5,10 +5,42 @@
 [![Pydantic](https://img.shields.io/badge/pydantic-v2-orange.svg)](https://docs.pydantic.dev/)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg)](#4-容器化部署)
 [![CI](https://img.shields.io/badge/ci-github%20actions-2088FF.svg)](./.github/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-74%20passed-brightgreen.svg)](#-测试覆盖)
 
-**面向 AI 应用的生产级 FastAPI 后端启动模板** —— LLM 多模型网关、MCP 工具生态、SSE 流式响应、可观测性、安全限流、容器化 CI/CD 全部开箱即用，让你专注业务而非重复搭基建。
+<p align="center">
+  <img src="./docs/social-preview.png" alt="FastAPI AI Starter" width="100%">
+</p>
 
-> 零侵入设计：每个模块相互独立、可按需裁剪，不用的能力删掉目录即可，互不影响。
+## 一句话介绍
+
+**面向 AI 应用的生产级 FastAPI 后端脚手架** —— 用户鉴权 / 资源 CRUD / LLM 多模型网关 / MCP 工具 / SSE 流式 / 消息队列 / 任务调度 / 可观测性，全部开箱即用。3 分钟启动，直接写业务。
+
+> 从零搭一个 AI 应用后端要多久？注册登录、权限、分页、流式输出、模型接入、健康检查……
+> 用 fastapi-ai-starter，这些都有了，你只需要写业务逻辑。
+
+---
+
+## 为什么选 fastapi-ai-starter？
+
+市面上 FastAPI 脚手架很多，但它们大多是 **通用 CRUD 模板**。做 AI 应用时，你还得自己接 LLM、搞流式、搭工具生态。
+
+| 能力 | fastapi-ai-starter | fastapi 官方模板 | full-stack-fastapi | 其他 boilerplate |
+|---|:---:|:---:|:---:|:---:|
+| 用户体系（注册/登录/角色） | ✅ | ❌ | ✅ | ⚠️ |
+| 资源 CRUD + 权限隔离 | ✅ | ❌ | ⚠️ | ⚠️ |
+| **LLM 多模型网关（零 SDK）** | ✅ | ❌ | ❌ | ❌ |
+| **MCP 工具生态（SSE / stdio）** | ✅ | ❌ | ❌ | ❌ |
+| **SSE 流式响应 + LLM Streamer** | ✅ | ❌ | ❌ | ⚠️ |
+| Kafka 消息链路（自动重连） | ✅ | ❌ | ❌ | ❌ |
+| 后台任务调度 + 实时进度 | ✅ | ❌ | ✅ | ⚠️ |
+| 健康探针 + Prometheus 指标 | ✅ | ❌ | ⚠️ | ❌ |
+| 限流 + 安全中间件 | ✅ | ❌ | ✅ | ⚠️ |
+| Docker 多阶段 + CI/CD | ✅ | ❌ | ✅ | ⚠️ |
+| DB 不可用优雅降级 | ✅ | ❌ | ❌ | ❌ |
+
+**一句话差异**：别人给你一个 CRUD 架子，我们给你一个 **AI 应用直接能上生产** 的完整后端。
+
+---
 
 ## 核心能力
 
@@ -29,19 +61,27 @@
 
 ## 0 快速上手
 
-### 方式一：Docker Compose（推荐，零配置）
+### ⚡ 30 秒极速体验（Docker）
+
+一条命令启动整个后端，零配置：
 
 ```shell
-# 一键启动 app + MySQL + Redis（--profile full 追加单机 Kafka）
 docker compose up -d
-
-# 存活探针 / 就绪探针 / 指标
-curl http://localhost:8080/api/sample/monitor/healthz
-curl http://localhost:8080/api/sample/monitor/readyz
-curl http://localhost:8080/api/sample/monitor/metrics
 ```
 
-### 方式二：本地开发
+启动后你可以：
+
+| 你想看什么 | 访问地址 |
+|---|---|
+| 📖 **完整 API 文档**（Swagger UI） | `http://localhost:8080/api/sample/docs` |
+| 📋 **Redoc 文档** | `http://localhost:8080/api/sample/redoc` |
+| ❤️ 存活检查 | `http://localhost:8080/api/sample/monitor/healthz` |
+| ✅ 就绪探针（各组件状态） | `http://localhost:8080/api/sample/monitor/readyz` |
+| 📊 Prometheus 指标 | `http://localhost:8080/api/sample/metrics` |
+
+> 想加 Kafka？`docker compose --profile full up -d` 即可。
+
+### 💻 本地开发
 
 ```powershell
 # 1. 创建并激活 3.12 虚拟环境
@@ -306,7 +346,7 @@ docker run -p 8080:8080 fastapi-ai-starter:latest
 
 推送到 main 或提交 PR 时，[GitHub Actions](./.github/workflows/ci.yml) 自动执行：
 - **lint**：ruff 全量检查
-- **test**：68 项单元测试回归（MCP / SSE / LLM 网关 / 可观测性 / 安全限流 / Kafka 链路 / 任务调度）
+- **test**：74 项单元测试回归（用户体系 / 资源 CRUD / LLM 网关 / MCP / SSE / 可观测性 / 安全限流 / Kafka / 任务调度）
 
 ### 4.4 预编译发布（可选）
 
@@ -319,6 +359,30 @@ docker build -t [tag] -f ./docker/build_dockerfile .   # 打包编译产物为�
 ```
 
 老的源码镜像打包方式保留在 `docker/python_dockerfile`（日常部署建议使用根目录 Dockerfile）。
+
+---
+
+## 🎯 路线图
+
+- [x] **v1.x** — FastAPI + Tortoise-orm 基础框架（Python 3.9）
+- [x] **v2.0** — 升级 Python 3.12，全栈依赖主版本，LLM 网关 + MCP + SSE 流式
+- [x] 用户体系（注册/登录/JWT/角色）
+- [x] 资源 CRUD 模板（分页/权限隔离/管理员查询）
+- [ ] 文件上传 / 对象存储模板
+- [ ] WebSocket 实时通信示例
+- [ ] RAG 知识库示例（向量检索 + LLM 问答）
+- [ ] Agent 编排模板（LangGraph 集成）
+- [ ] 管理后台（React Admin 开箱版）
+
+有想加的功能？欢迎提 [Issue](../../issues) 或 PR 🤝
+
+---
+
+## ⭐ 支持一下
+
+如果这个项目帮你节省了时间，**点个 Star** 就是最大的支持！
+
+你的关注是我持续迭代的动力 💪
 
 ---
 

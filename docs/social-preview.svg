@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <defs>
+    <!-- 深色渐变背景 -->
+    <linearGradient id="bg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0a0e1a"/>
+      <stop offset="100%" stop-color="#111827"/>
+    </linearGradient>
+    <!-- 青色发光效果 -->
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <!-- 网格图案 -->
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#06b6d4" stroke-width="0.5" opacity="0.06"/>
+    </pattern>
+  </defs>
+
+  <!-- 背景 -->
+  <rect width="1280" height="640" fill="url(#bg)"/>
+  <rect width="1280" height="640" fill="url(#grid)"/>
+
+  <!-- 星点装饰 -->
+  <circle cx="80" cy="120" r="1.5" fill="#22d3ee" opacity="0.6"/>
+  <circle cx="200" cy="80" r="1" fill="#22d3ee" opacity="0.4"/>
+  <circle cx="350" cy="200" r="1.5" fill="#22d3ee" opacity="0.5"/>
+  <circle cx="500" cy="60" r="1" fill="#22d3ee" opacity="0.3"/>
+  <circle cx="700" cy="150" r="1.5" fill="#22d3ee" opacity="0.6"/>
+  <circle cx="900" cy="90" r="1" fill="#22d3ee" opacity="0.4"/>
+  <circle cx="1050" cy="180" r="1.5" fill="#22d3ee" opacity="0.5"/>
+  <circle cx="1150" cy="100" r="1" fill="#22d3ee" opacity="0.3"/>
+  <circle cx="1200" cy="280" r="1.5" fill="#22d3ee" opacity="0.6"/>
+  <circle cx="150" cy="400" r="1" fill="#22d3ee" opacity="0.4"/>
+  <circle cx="400" cy="500" r="1.5" fill="#22d3ee" opacity="0.5"/>
+  <circle cx="850" cy="520" r="1" fill="#22d3ee" opacity="0.3"/>
+  <circle cx="1100" cy="480" r="1.5" fill="#22d3ee" opacity="0.6"/>
+  <circle cx="600" cy="560" r="1" fill="#22d3ee" opacity="0.4"/>
+  <circle cx="250" cy="550" r="1.5" fill="#22d3ee" opacity="0.5"/>
+  <circle cx="1000" cy="400" r="1" fill="#22d3ee" opacity="0.3"/>
+  <circle cx="50" cy="300" r="1.5" fill="#22d3ee" opacity="0.4"/>
+
+  <!-- 左上角闪电图标 -->
+  <g transform="translate(60, 55)" filter="url(#glow)">
+    <polygon points="25,0 0,38 18,38 10,65 40,22 22,22" fill="#06b6d4"/>
+  </g>
+
+  <!-- 8 个能力标签（弧形排列） -->
+  <!-- LLM Gateway -->
+  <g transform="translate(165, 245) rotate(-25)">
+    <rect x="-95" y="-22" width="190" height="44" rx="22" fill="rgba(6,182,212,0.08)" stroke="#06b6d4" stroke-width="2"/>
+    <text x="0" y="6" text-anchor="middle" fill="white" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="600">LLM Gateway</text>
+  </g>
+  <!-- MCP Tools -->
+  <g transform="translate(330, 195) rotate(-15)">
+    <rect x="-85" y="-22" width="170" height="44" rx="22" fill="rgba(6,182,212,0.08)" stroke="#06b6d4" stroke-width="2"/>
+    <text x="0" y="6" text-anchor="middle" fill="white" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="600">MCP Tools</text>
+  </g>
+  <!-- SSE Streaming -->
+  <g transform="translate(500, 170) rotate(-7)">
+    <rect x="-100" y="-22" width="200" height="44" rx="22" fill="rgba(6,182,212,0.08)" stroke="#06b6d4" stroke-width="2"/>
+    <text x="0" y="6" text-anchor="middle" fill="white" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="600">SSE Streaming</text>
+  </g>
+  <!-- JWT Auth -->
+  <g transform="translate(640, 165)">
+    <rect x="-75" y="-22" width="150" height="44" rx="22" fill="rgba(6,182,212,0.08)" stroke="#06b6d4" stroke-width="2"/>
+    <text x="0" y="6" text-anchor="middle" fill="white" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="600">JWT Auth</text>
+  </g>
+  <!-- CRUD Template -->
+  <g transform="translate(790, 170) rotate(7)">
+    <rect x="-105" y="-22" width="210" height="44" rx="22" fill="rgba(6,182,212,0.08)" stroke="#06b6d4" stroke-width="2"/>
+    <text x="0" y="6" text-anchor="middle" fill="white" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="600">CRUD Template</text>
+  </g>
+  <!-- Docker Ready -->
+  <g transform="translate(950, 195) rotate(15)">
+    <rect x="-95" y="-22" width="190" height="44" rx="22" fill="rgba(6,182,212,0.08)" stroke="#06b6d4" stroke-width="2"/>
+    <text x="0" y="6" text-anchor="middle" fill="white" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="600">Docker Ready</text>
+  </g>
+  <!-- Kafka -->
+  <g transform="translate(1070, 230) rotate(22)">
+    <rect x="-60" y="-22" width="120" height="44" rx="22" fill="rgba(6,182,212,0.12)" stroke="#22d3ee" stroke-width="2"/>
+    <text x="0" y="6" text-anchor="middle" fill="#22d3ee" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="600">Kafka</text>
+  </g>
+  <!-- Prometheus Metrics -->
+  <g transform="translate(1150, 300) rotate(30)">
+    <rect x="-110" y="-22" width="220" height="44" rx="22" fill="rgba(6,182,212,0.08)" stroke="#06b6d4" stroke-width="2"/>
+    <text x="0" y="6" text-anchor="middle" fill="white" font-family="Segoe UI, Arial, sans-serif" font-size="18" font-weight="600">Prometheus Metrics</text>
+  </g>
+
+  <!-- 主标题 -->
+  <text x="640" y="365" text-anchor="middle" fill="white" font-family="Segoe UI, Arial, sans-serif" font-size="78" font-weight="800" filter="url(#glow)">FastAPI AI Starter</text>
+
+  <!-- 副标题 -->
+  <text x="640" y="420" text-anchor="middle" fill="#94a3b8" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="400">Production-ready FastAPI backend scaffold for AI applications</text>
+
+  <!-- 分隔线 -->
+  <rect x="590" y="448" width="100" height="4" rx="2" fill="#06b6d4"/>
+
+  <!-- 底部技术栈 -->
+  <text x="640" y="530" text-anchor="middle" fill="#64748b" font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="400">Python 3.12 · FastAPI · Pydantic v2 · Tortoise-ORM</text>
+</svg>
