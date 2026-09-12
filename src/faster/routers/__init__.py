@@ -13,6 +13,7 @@ from .monitor import monitor_router
 from .resource.routers import resource_router
 from .security import security_router
 from .sse import sse_router
+from .tasks import tasks_router
 from .users.routers import user_router
 
 __all__ = ("all_router",)
@@ -26,6 +27,7 @@ all_router.include_router(llm_router)
 all_router.include_router(monitor_router)
 all_router.include_router(security_router)
 all_router.include_router(kafka_router)
+all_router.include_router(tasks_router)
 
 
 class FastAPIStatus(BaseModel):

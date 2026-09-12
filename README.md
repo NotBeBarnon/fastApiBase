@@ -18,11 +18,12 @@
 | 🔧 **MCP 工具生态** | 工具注册中心 + JSON-RPC Server（SSE / stdio 双传输），直接接入 Claude Desktop、Cline 等 AI 客户端 | `GET /mcp/sse` |
 | 🌊 **SSE 流式响应** | SSEStream（队列 / 生成器模式）、LLMStreamer（OpenAI 兼容流式输出） | `GET /sse/chat` |
 | 📨 **Kafka 消息链路** | 自动重连 + 自动建 topic 的 producer/consumer、EventPublisher 事件发布封装、回调式后台消费 worker | `POST /kafka/publish`、`GET /kafka/status` |
+| ⏰ **后台任务调度** | TaskManager 注册中心（interval/cron）、手动触发 + 状态跟踪、SSE 实时进度订阅、暂停/恢复 | `GET /tasks`、`POST /tasks/{name}/trigger` |
 | 📊 **可观测性** | DB / Redis / Kafka / LLM 四类健康探针、Prometheus 指标（P50-P99 延迟 / Token / 成本）、trace_id 结构化追踪 | `/monitor/healthz`、`/readyz`、`/metrics` |
 | 🔐 **安全与限流** | 零依赖 HS256 JWT、API Key 鉴权（角色校验）、Redis Lua 滑动窗口限流（内存兜底）、请求 ID 链路 | `POST /security/token`、`GET /security/limited` |
 | 🚀 **DevOps** | 多阶段 Dockerfile、docker-compose 一键编排（MySQL + Redis + 可选 Kafka）、GitHub Actions 自动回归 | `docker compose up -d` |
 
-所有端点自带 Swagger 文档（`/docs`），59 项单元测试全量覆盖，CI 每次 push 自动回归。
+所有端点自带 Swagger 文档（`/docs`），68 项单元测试全量覆盖，CI 每次 push 自动回归。
 
 ## 0 快速上手
 
@@ -101,6 +102,7 @@ python main.py run --reload   # 开发热重载
         ├── security_tools/ # 安全（JWT / API Key / 滑动窗口限流）
         ├── redis_tools/    # redis.asyncio 客户端（单连接 / 哨兵，自动重连）
         ├── kafka_tools/    # aiokafka 客户端
+        ├── schedule_tasks/ # 后台任务管理（TaskManager / 示例任务）
         ├── fastapi_tools/  # CBV 装饰器与视图集
         ├── tortoise_tools/ # Tortoise 自定义字段、验证器
         └── schedule_tasks/ # 定时任务函数
@@ -207,7 +209,7 @@ docker run -p 8080:8080 fastapi-ai-starter:latest
 
 推送到 main 或提交 PR 时，[GitHub Actions](./.github/workflows/ci.yml) 自动执行：
 - **lint**：ruff 全量检查
-- **test**：59 项单元测试回归（MCP / SSE / LLM 网关 / 可观测性 / 安全限流 / Kafka 链路）
+- **test**：68 项单元测试回归（MCP / SSE / LLM 网关 / 可观测性 / 安全限流 / Kafka 链路 / 任务调度）
 
 ### 4.4 预编译发布（可选）
 

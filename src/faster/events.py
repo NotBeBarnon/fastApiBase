@@ -5,15 +5,12 @@ import asyncio
 import contextlib
 from collections.abc import AsyncIterator
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 from loguru import logger
 from tortoise import Tortoise
 
 from ..my_tools.redis_tools.clients import RedisClient, RedisSentinelClient
-from ..my_tools.schedule_tasks.scheduleUtils import quarterly_task
-from ..settings import DATABASE_CONFIG, DEFAULT_TIMEZONE, MQ_CONFIG, REDIS_CONFIG
+from ..settings import DATABASE_CONFIG, MQ_CONFIG, REDIS_CONFIG
 
 __all__ = ("lifespan",)
 
@@ -63,15 +60,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             await redis_client.wait_connect()
     app.state.redis = redis_client
 
-    # 3. 定时任务
-    scheduler = AsyncIOScheduler()
-    scheduler.add_job(
-        quarterly_task,
-        CronTrigger(month="1,4,7,10", day=1, hour=0, minute=0, second=0, timezone=DEFAULT_TIMEZONE),
-    )
-    scheduler.start()
-    app.state.scheduler = scheduler
-    logger.debug("Scheduler started")
+    # 3. 后台任务与调度（TaskManager 封装 AsyncIOScheduler：注册中心 + 状态跟踪 + SSE 进度）
+    from ..my_tools.schedule_tasks import TaskManager
+    from ..my_tools.schedule_tasks.examples import register_example_tasks
+
+    task_manager = TaskManager()
+    register_example_tasks(task_manager)
+    task_manager.start()
+    app.state.task_manager = task_manager
+    logger.debug(f"TaskManager started: {[t['name'] for t in task_manager.list_tasks()]}")
 
     # 3.5 Kafka（默认关闭，[myproject.mq] enabled 或 FS_KAFKA_ENABLED 开启；
     #     延迟导入避免未安装 aiokafka 的环境加载失败）
@@ -123,7 +120,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         logger.info("Shutdown: releasing resources")
-        scheduler.shutdown(wait=False)
+        task_manager.close()
         if kafka_producer is not None:
             kafka_producer.stop()
         if kafka_consumer is not None:

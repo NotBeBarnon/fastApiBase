@@ -1,1 +1,8 @@
-# @Description : 定时任务工具入口；scheduler 实例由 lifespan 创建并通过 app.state 暴露
+# @Description : 后台任务与调度工具集（任务管理器 / 示例任务）
+from .manager import TaskContext, TaskManager, TaskRun
+
+__all__ = (
+    "TaskContext",
+    "TaskManager",
+    "TaskRun",
+)
