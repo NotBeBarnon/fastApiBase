@@ -1,48 +1,45 @@
 from __future__ import annotations
 
-from pydantic import ConfigDict, Field, field_validator
-from tortoise.contrib.pydantic import pydantic_model_creator
+from datetime import datetime
 
-from .models import User
-
-UserSchema = pydantic_model_creator(User, name="UserSchema", exclude=("password",))
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
-class UserCreateSchema(
-    pydantic_model_creator(User, name="UserCreateSchema", exclude=("uid",), exclude_readonly=True)
-):
-    model_config = ConfigDict(title="UserCreateSchema")
+class RegisterRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=32, description="用户名（字母/数字/下划线）")
+    password: str = Field(..., min_length=8, max_length=64, description="密码（至少 8 位）")
+    password_again: str = Field(..., description="重复密码")
 
-    password_again: str = Field(..., description="重复输入验证密码")
+    @field_validator("username")
+    @classmethod
+    def username_validator(cls, username: str) -> str:
+        if not username.replace("_", "").isalnum():
+            raise ValueError("用户名仅允许字母、数字、下划线")
+        return username
 
     @field_validator("password_again")
     @classmethod
     def password_again_validator(cls, password_again: str, info) -> str:
         if password_again != info.data.get("password"):
-            raise ValueError("两次密码不一致")
+            raise ValueError("两次输入的密码不一致")
         return password_again
 
 
-class UserUpdateSchema(
-    pydantic_model_creator(User, name="UserUpdateSchema", exclude=("uid",), exclude_readonly=True)
-):
-    model_config = ConfigDict(title="UserUpdateSchema")
+class LoginRequest(BaseModel):
+    username: str = Field(..., min_length=1, max_length=32)
+    password: str = Field(..., min_length=1, max_length=64)
 
-    username: str | None = None
-    password: str | None = None
-    password_again: str | None = Field(None, description="再次验证密码")
 
-    @field_validator("password")
-    @classmethod
-    def password_validator(cls, password: str | None) -> str | None:
-        if password is not None and not password:
-            raise ValueError("密码不可设置为空")
-        return password
+class PasswordChangeRequest(BaseModel):
+    old_password: str = Field(..., min_length=1, max_length=64, description="旧密码")
+    new_password: str = Field(..., min_length=8, max_length=64, description="新密码（至少 8 位）")
 
-    @field_validator("password_again")
-    @classmethod
-    def password_again_validator(cls, password_again: str | None, info) -> str | None:
-        pwd = info.data.get("password")
-        if pwd is not None and password_again != pwd:
-            raise ValueError("密码不一致")
-        return password_again
+
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    username: str
+    role: str
+    is_active: bool
+    created_at: datetime | None = None

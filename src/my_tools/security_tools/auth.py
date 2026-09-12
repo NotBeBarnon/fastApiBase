@@ -82,3 +82,15 @@ async def verify_jwt(request: Request) -> dict:
             f"Invalid token: {exc}",
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
+
+
+def require_jwt_role(role: str):
+    """JWT 依赖工厂；payload.role 不匹配指定角色时抛 403。"""
+
+    async def dependency(request: Request) -> dict:
+        payload = await verify_jwt(request)
+        if payload.get("role") != role:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, f"Role '{role}' required, got '{payload.get('role')}'")
+        return payload
+
+    return dependency
