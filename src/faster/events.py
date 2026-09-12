@@ -10,7 +10,7 @@ from loguru import logger
 from tortoise import Tortoise
 
 from ..my_tools.redis_tools.clients import RedisClient, RedisSentinelClient
-from ..settings import DATABASE_CONFIG, MQ_CONFIG, REDIS_CONFIG
+from ..settings import DATABASE_CONFIG, DEV, MQ_CONFIG, REDIS_CONFIG
 
 __all__ = ("lifespan",)
 
@@ -21,10 +21,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     logger.info("Startup: initializing resources")
 
-    # 1. Tortoise ORM（未配置任何 app 时跳过初始化，等模型注册后再启用）
+    # 1. Tortoise ORM（未配置任何 app 时跳过；连接失败降级运行，/readyz 会暴露 down）
     if DATABASE_CONFIG["apps"]:
-        await Tortoise.init(config=DATABASE_CONFIG)
-        logger.info(f"Tortoise-ORM started: {Tortoise.apps}")
+        try:
+            await Tortoise.init(config=DATABASE_CONFIG)
+            if DEV:
+                # 开发模式自动同步表结构（不破坏已有表）
+                await Tortoise.generate_schemas(safe=True)
+            logger.info(f"Tortoise-ORM started: {list(Tortoise.apps)}")
+        except Exception as exc:
+            logger.warning(f"Tortoise-ORM init failed, running without DB: {exc.__class__.__name__}: {exc}")
     else:
         logger.warning("Tortoise-ORM skipped: no apps configured in DATABASE_CONFIG")
 

@@ -236,15 +236,14 @@ DATABASE_CONFIG: dict = {
         },
     },
     "apps": {
-        # 真正使用时取消注释：
-        # "user": {
-        #     "models": ["src.faster.routers.users.models"],
-        #     "default_connection": "default",
-        # },
-        # "resource": {
-        #     "models": ["src.faster.routers.resource.models"],
-        #     "default_connection": "default",
-        # },
+        "users": {
+            "models": ["src.faster.routers.users.models"],
+            "default_connection": "default",
+        },
+        "resource": {
+            "models": ["src.faster.routers.resource.models"],
+            "default_connection": "default",
+        },
     },
     "use_tz": True,
     "timezone": DEFAULT_TIMEZONE,

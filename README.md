@@ -21,9 +21,11 @@
 | ⏰ **后台任务调度** | TaskManager 注册中心（interval/cron）、手动触发 + 状态跟踪、SSE 实时进度订阅、暂停/恢复 | `GET /tasks`、`POST /tasks/{name}/trigger` |
 | 📊 **可观测性** | DB / Redis / Kafka / LLM 四类健康探针、Prometheus 指标（P50-P99 延迟 / Token / 成本）、trace_id 结构化追踪 | `/monitor/healthz`、`/readyz`、`/metrics` |
 | 🔐 **安全与限流** | 零依赖 HS256 JWT、API Key 鉴权（角色校验）、Redis Lua 滑动窗口限流（内存兜底）、请求 ID 链路 | `POST /security/token`、`GET /security/limited` |
+| 👤 **用户体系** | PBKDF2-SHA256 密码哈希、注册/登录/改密、JWT Bearer 鉴权、admin/user 角色控制、DB 不可用优雅降级 | `POST /user/register`、`POST /user/login`、`GET /user/me`、`GET /user/list` |
+| 📦 **资源 CRUD** | 统一分页/过滤/排序规范、owner 权限隔离（越权 404 防枚举）、管理员全量查询、部分更新、DB 降级 | `GET/POST/PUT/DELETE /resource/beams`、`GET /resource/admin/beams` |
 | 🚀 **DevOps** | 多阶段 Dockerfile、docker-compose 一键编排（MySQL + Redis + 可选 Kafka）、GitHub Actions 自动回归 | `docker compose up -d` |
 
-所有端点自带 Swagger 文档（`/docs`），68 项单元测试全量覆盖，CI 每次 push 自动回归。
+所有端点自带 Swagger 文档（`/docs`），74 项单元测试全量覆盖，CI 每次 push 自动回归。
 
 ## 0 快速上手
 
@@ -131,6 +133,101 @@ LLM 提供商在 `[myproject.llm.providers]` 配置（DeepSeek / OpenAI / Anthro
 Kafka 链路默认关闭，启用方式（二选一）：`[myproject.mq] enabled = true` 或环境变量 `FS_KAFKA_ENABLED=true`。启用后 lifespan 自动挂载 producer（自动重连 + 自动建 topic）、启动回调式后台消费 worker，并纳入 `/monitor/readyz` 探针；通过 `POST /kafka/publish` 发布消息、`GET /kafka/status` 查看链路状态。消费回调继承 `BaseTopicCallSingle` 并在 `my_tools/kafka_tools/examples.py` 的 `get_consumer_callbacks()` 中注册即可。
 
 安全配置见 `[myproject.security]`（API Key 表 / JWT 密钥 / 限流参数）——**生产环境务必修改默认 jwt_secret**。
+
+### 2.5 用户体系
+
+基于 Tortoise ORM + JWT Bearer 的完整用户体系，代码位于 `src/faster/routers/users/`。
+
+| 端点 | 方法 | 鉴权 | 说明 |
+|---|---|---|---|
+| `/user/register` | POST | 无 | 注册新用户（用户名 3-32 位字母数字下划线，密码 ≥ 8 位） |
+| `/user/login` | POST | 无 | 登录签发 JWT（access_token / token_type / expires_in） |
+| `/user/me` | GET | Bearer JWT | 获取当前用户信息（不含密码哈希） |
+| `/user/password` | PUT | Bearer JWT | 修改自己的密码（需旧密码验证） |
+| `/user/list` | GET | Bearer JWT (admin) | 分页用户列表（仅 admin 角色） |
+
+**核心特性：**
+- **PBKDF2-SHA256 密码哈希**：100,000 次迭代 + 16 字节随机盐，存储格式 `pbkdf2_sha256$iterations$salt$hash`，常量时间比较防时序攻击（stdlib 零依赖实现）
+- **JWT 角色鉴权**：Token 携带 `sub`（用户名）、`role`（user/admin）、`uid`（用户ID），通过 `require_jwt_role("admin")` 依赖限制管理端点
+- **DB 不可用优雅降级**：数据库连接失败时应用照常启动，用户相关端点统一返回 503，不影响其他模块
+- **字段零泄露**：所有对外响应模型均不包含 `password_hash` 字段
+
+**快速试用：**
+
+```shell
+# 注册
+curl -X POST http://localhost:8080/api/sample/user/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"alice","password":"mysecret123","password_again":"mysecret123"}'
+
+# 登录获取 token
+TOKEN=$(curl -s -X POST http://localhost:8080/api/sample/user/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"alice","password":"mysecret123"}' | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+
+# 获取个人信息
+curl http://localhost:8080/api/sample/user/me \
+  -H "Authorization: Bearer $TOKEN"
+
+# 修改密码
+curl -X PUT http://localhost:8080/api/sample/user/password \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"old_password":"mysecret123","new_password":"newsecret456"}'
+```
+
+> 管理员账号需手动在数据库中将 `role` 字段改为 `admin` 后访问 `/user/list`。
+
+### 2.6 资源 CRUD 模板
+
+基于 Beam 模型的标准 CRUD 模板，代码位于 `src/faster/routers/resource/`，可作为新业务模块的参考样板。
+
+| 端点 | 方法 | 鉴权 | 说明 |
+|---|---|---|---|
+| `/resource/beams` | GET | Bearer JWT | 分页查询自己的波束（支持类型过滤 / 名称模糊 / 排序） |
+| `/resource/beams/{id}` | GET | Bearer JWT | 获取单个波束详情（越权返回 404，防枚举） |
+| `/resource/beams` | POST | Bearer JWT | 创建波束（自动绑定 owner 为当前用户） |
+| `/resource/beams/{id}` | PUT | Bearer JWT | 部分更新波束（仅改传入字段） |
+| `/resource/beams/{id}` | DELETE | Bearer JWT | 删除波束（204 无返回体） |
+| `/resource/admin/beams` | GET | Bearer JWT (admin) | 管理员全量查询（支持 owner_id 过滤） |
+
+**核心设计：**
+- **统一分页工具**：`src/my_tools/tortoise_tools/pagination.py` 提供 `PageResult[T]` / `PaginationParams` / `OrderByParams` / `make_order_by_params()`，所有列表接口复用同一套规范
+- **Owner 权限隔离**：普通用户的所有查询自动加 `owner_id=当前用户` 过滤，越权访问统一返回 404（避免资源 ID 枚举探测）
+- **管理员全量视角**：`/resource/admin/beams` 需 admin 角色，支持按 `owner_id` 过滤指定用户的资源
+- **部分更新**：PUT 接口使用 `model_dump(exclude_unset=True)`，只更新请求中显式传入的字段
+- **DB 优雅降级**：所有 ORM 调用走 `_safe()` 包装，DB 不可用统一返回 503，不影响其他模块
+
+**快速试用：**
+
+```shell
+# 登录获取 token
+TOKEN=$(curl -s -X POST http://localhost:8080/api/sample/user/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"alice","password":"mysecret123"}' | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+
+# 创建波束
+curl -X POST http://localhost:8080/api/sample/resource/beams \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"beam-01","type":1}'
+
+# 分页查询（类型过滤 + 排序）
+curl "http://localhost:8080/api/sample/resource/beams?page=1&page_size=10&beam_type=1&sort=-created_at" \
+  -H "Authorization: Bearer $TOKEN"
+
+# 更新（仅改名称）
+curl -X PUT http://localhost:8080/api/sample/resource/beams/1 \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"new-name"}'
+
+# 删除
+curl -X DELETE http://localhost:8080/api/sample/resource/beams/1 \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+> 新增业务模块时，复制 `resource/` 目录，替换 Model / Schema / 路由前缀即可，分页工具与 `_safe()` 降级模式直接复用。
 
 ## 3 数据库迁移
 

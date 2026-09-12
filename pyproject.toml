@@ -47,6 +47,7 @@ dev = [
     "ruff>=0.6.9",
     "pytest>=8.3.3",
     "pytest-asyncio>=0.24.0",
+    "aiosqlite>=0.20.0",
 ]
 build = [
     "cx_Freeze>=7.2.3",

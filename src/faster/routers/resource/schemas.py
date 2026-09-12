@@ -1,18 +1,44 @@
+# @Description : 资源模块 Schemas（Pydantic v2 原生）
 from __future__ import annotations
 
-from pydantic import ConfigDict
-from tortoise.contrib.pydantic import pydantic_model_creator
+from datetime import datetime
 
-from .models import Beam, BeamTypeEnum
+from pydantic import BaseModel, ConfigDict, Field
 
-BeamSchema = pydantic_model_creator(Beam, name="BeamSchema")
-BeamCreateSchema = pydantic_model_creator(Beam, name="BeamCreateSchema", exclude=("id",), exclude_readonly=True)
+from .models import BeamTypeEnum
 
 
-class BeamUpdateSchema(
-    pydantic_model_creator(Beam, name="BeamUpdateSchema", exclude=("id",), exclude_readonly=True)
-):
-    model_config = ConfigDict(title="BeamUpdateSchema")
+class BeamBase(BaseModel):
+    """Beam 基础字段"""
 
-    name: str | None = None
-    type: BeamTypeEnum | None = None
+    name: str = Field(..., min_length=1, max_length=50, description="波束名称")
+    type: BeamTypeEnum = Field(..., description="波束类型：ka=1, x=2")
+
+
+class BeamCreate(BeamBase):
+    """创建请求"""
+
+    is_active: bool = Field(True, description="是否启用")
+
+
+class BeamUpdate(BaseModel):
+    """更新请求（部分更新，所有字段可选）"""
+
+    name: str | None = Field(None, min_length=1, max_length=50, description="波束名称")
+    type: BeamTypeEnum | None = Field(None, description="波束类型：ka=1, x=2")
+    is_active: bool | None = Field(None, description="是否启用")
+
+
+class BeamOut(BeamBase):
+    """对外输出（不含敏感字段）"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    is_active: bool
+    owner_id: int
+    created_at: datetime
+    modified_at: datetime
+
+
+__all__ = ("BeamTypeEnum", "BeamCreate", "BeamUpdate", "BeamOut")
