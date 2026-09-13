@@ -10,6 +10,7 @@ from .kafka import kafka_router
 from .llm import llm_router
 from .mcp import mcp_router
 from .monitor import monitor_router
+from .rag.routers import rag_router
 from .resource.routers import resource_router
 from .security import security_router
 from .sse import sse_router
@@ -24,6 +25,7 @@ all_router.include_router(resource_router)
 all_router.include_router(mcp_router)
 all_router.include_router(sse_router)
 all_router.include_router(llm_router)
+all_router.include_router(rag_router)
 all_router.include_router(monitor_router)
 all_router.include_router(security_router)
 all_router.include_router(kafka_router)

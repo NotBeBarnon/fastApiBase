@@ -178,3 +178,19 @@ enable_cost_tracking = true
 # max_retries = 2
 # priority = 80
 # enabled = false
+
+[myproject.rag]
+# 文本分块参数
+chunk_size = 500
+chunk_overlap = 80
+# 检索参数
+default_top_k = 4
+max_top_k = 10
+score_threshold = 0.0
+# 模型选择（留空走 LLM 网关默认）
+embedding_provider = ""
+embedding_model = ""
+chat_provider = ""
+chat_model = ""
+chat_temperature = 0.3
+# chat_max_tokens = 2048

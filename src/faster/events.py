@@ -10,7 +10,7 @@ from loguru import logger
 from tortoise import Tortoise
 
 from ..my_tools.redis_tools.clients import RedisClient, RedisSentinelClient
-from ..settings import AUTO_SCHEMA, DATABASE_CONFIG, MQ_CONFIG, REDIS_CONFIG
+from ..settings import AUTO_SCHEMA, DATABASE_CONFIG, MQ_CONFIG, RAG_CONFIG, REDIS_CONFIG
 
 __all__ = ("lifespan",)
 
@@ -121,6 +121,38 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     llm_gateway = LLMGateway(LLM_CONFIG)
     app.state.llm = llm_gateway
     logger.info(f"LLM Gateway started: {list(LLM_CONFIG.providers.keys()) or '(no providers)'}")
+
+    # 5. RAG 知识库：构建内存向量索引（从 DB 加载所有 chunk），挂载到 app.state.rag
+    from ..my_tools.rag_tools import InMemoryVectorStore, RagService, RagServiceConfig
+
+    rag_store = InMemoryVectorStore()
+    rag_service = RagService(
+        llm_gateway=llm_gateway,
+        vector_store=rag_store,
+        config=RagServiceConfig(**RAG_CONFIG),
+    )
+    try:
+        # 只有 Tortoise 成功初始化且 rag app 已注册时才能加载（失败降级不影响启动）
+        from ..faster.routers.rag.models import KnowledgeChunk
+
+        chunks = await KnowledgeChunk.all().select_related("doc")
+        loaded = 0
+        for ch in chunks:
+            doc = getattr(ch, "doc", None)
+            owner_id = doc.owner_id if doc is not None else 0
+            title = doc.title if doc is not None else ""
+            await rag_store.add(
+                chunk_id=ch.id,
+                doc_id=ch.doc_id,
+                embedding=ch.embedding or [],
+                content=ch.content,
+                metadata={"owner_id": owner_id, "title": title, "chunk_index": ch.chunk_index},
+            )
+            loaded += 1
+        logger.info(f"RAG service started: {loaded} chunks loaded from DB, fallback={rag_service.fallback_embedding}")
+    except Exception as exc:
+        logger.warning(f"RAG warm index skipped: {exc.__class__.__name__}: {exc}")
+    app.state.rag = rag_service
 
     try:
         yield

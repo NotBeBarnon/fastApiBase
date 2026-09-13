@@ -5,7 +5,7 @@
 [![Pydantic](https://img.shields.io/badge/pydantic-v2-orange.svg)](https://docs.pydantic.dev/)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg)](#4-容器化部署)
 [![CI](https://img.shields.io/badge/ci-github%20actions-2088FF.svg)](./.github/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-74%20passed-brightgreen.svg)](#-测试覆盖)
+[![Tests](https://img.shields.io/badge/tests-80%20passed-brightgreen.svg)](#-测试覆盖)
 [![License](https://img.shields.io/badge/license-MIT-yellow.svg)](./LICENSE)
 
 <p align="center">
@@ -47,9 +47,10 @@
 
 | 模块 | 能力 | 演示端点 |
 |---|---|---|
-| 🔀 **LLM 多模型网关** | 多 provider 优先级降级、指数退避重试、Token / 成本统计、OpenAI / DeepSeek / Claude / Ollama 统一接口 | `POST /llm/chat`、`POST /llm/stream` |
+| 🔀 **LLM 多模型网关** | 多 provider 优先级降级、指数退避重试、Token / 成本统计、OpenAI / DeepSeek / Claude / Ollama 统一接口（chat / stream / embeddings） | `POST /llm/chat` |
 | 🔧 **MCP 工具生态** | 工具注册中心 + JSON-RPC Server（SSE / stdio 双传输），直接接入 Claude Desktop、Cline 等 AI 客户端 | `GET /mcp/sse` |
 | 🌊 **SSE 流式响应** | SSEStream（队列 / 生成器模式）、LLMStreamer（OpenAI 兼容流式输出） | `GET /sse/chat` |
+| 📚 **RAG 知识库** | 文档入库自动分块 + embedding、内存向量索引（余弦相似度）、检索增强问答（普通 + SSE 流式）、无 LLM 时伪向量降级可离线 demo | `POST /rag/docs`、`POST /rag/search`、`POST /rag/chat` |
 | 📨 **Kafka 消息链路** | 自动重连 + 自动建 topic 的 producer/consumer、EventPublisher 事件发布封装、回调式后台消费 worker | `POST /kafka/publish`、`GET /kafka/status` |
 | ⏰ **后台任务调度** | TaskManager 注册中心（interval/cron）、手动触发 + 状态跟踪、SSE 实时进度订阅、暂停/恢复 | `GET /tasks`、`POST /tasks/{name}/trigger` |
 | 📊 **可观测性** | DB / Redis / Kafka / LLM 四类健康探针、Prometheus 指标（P50-P99 延迟 / Token / 成本）、trace_id 结构化追踪 | `/monitor/healthz`、`/monitor/readyz`、`/monitor/metrics` |
@@ -58,7 +59,7 @@
 | 📦 **资源 CRUD** | 统一分页/过滤/排序规范、owner 权限隔离（越权 404 防枚举）、管理员全量查询、部分更新、DB 降级 | `GET/POST/PUT/DELETE /resource/beams`、`GET /resource/admin/beams` |
 | 🚀 **DevOps** | 多阶段 Dockerfile、docker-compose 一键编排（MySQL + Redis + 可选 Kafka）、GitHub Actions 自动回归 | `docker compose up -d` |
 
-所有端点自带 Swagger 文档（`/docs`），74 项单元测试全量覆盖，CI 每次 push 自动回归。
+所有端点自带 Swagger 文档（`/docs`），80 项单元测试全量覆盖，CI 每次 push 自动回归。
 
 ## 0 快速上手
 
@@ -138,11 +139,12 @@ python main.py run --reload   # 开发热重载
     │   ├── apps.py         # FastAPI 实例 + 中间件挂载
     │   ├── events.py       # lifespan：Tortoise → Redis → Scheduler → LLM 网关
     │   ├── middlewares/    # 请求 ID + 访问日志中间件
-    │   └── routers/        # 路由（users / resource / mcp / sse / llm / monitor / security）
+    │   └── routers/        # 路由（users / resource / mcp / sse / llm / rag / monitor / security）
     └── my_tools/           # 独立工具库（可单独复用）
-        ├── llm_tools/      # LLM 网关（多 provider 降级 / 重试 / 成本统计）
+        ├── llm_tools/      # LLM 网关（多 provider 降级 / 重试 / 成本统计 / embeddings）
         ├── mcp_tools/      # MCP 协议（注册中心 / JSON-RPC Server / SSE+stdio 传输）
         ├── sse_tools/      # SSE 流式（SSEStream / LLMStreamer）
+        ├── rag_tools/      # RAG（分块 / 伪向量降级 / 内存索引 / 检索问答编排）
         ├── observability/  # 可观测（健康探针 / Prometheus 指标 / 调用追踪）
         ├── security_tools/ # 安全（JWT / API Key / 滑动窗口限流）
         ├── redis_tools/    # redis.asyncio 客户端（单连接 / 哨兵，自动重连）
@@ -274,6 +276,66 @@ curl -X DELETE http://localhost:8080/api/sample/resource/beams/1 \
 
 > 新增业务模块时，复制 `resource/` 目录，替换 Model / Schema / 路由前缀即可，分页工具与 `_safe()` 降级模式直接复用。
 
+### 2.7 RAG 知识库
+
+基于 LLM 网关的向量检索 + LLM 问答示例，代码位于 `src/faster/routers/rag/`（业务层）和 `src/my_tools/rag_tools/`（可复用工具层）。**零新增依赖**，默认纯 Python 余弦相似度 + 内存向量索引；未配置 embedding provider 时自动降级为确定性哈希伪向量（保证离线 demo 可跑）。
+
+| 端点 | 方法 | 鉴权 | 说明 |
+|---|---|---|---|
+| `/rag/docs` | GET | Bearer JWT | 分页查询自己的知识库文档（支持标题模糊、启用状态过滤） |
+| `/rag/docs/{id}` | GET | Bearer JWT | 文档详情（含正文，越权 404） |
+| `/rag/docs` | POST | Bearer JWT | 上传文档：自动分块 → embedding → 入库（DB + 内存索引） |
+| `/rag/docs/{id}` | PUT | Bearer JWT | 更新文档（内容变更会重新分块+向量化） |
+| `/rag/docs/{id}` | DELETE | Bearer JWT | 删除文档及所有分块 |
+| `/rag/search` | POST | Bearer JWT | 纯向量检索（无 LLM 也能工作，降级伪向量） |
+| `/rag/chat` | POST | Bearer JWT | 知识库问答：`stream=false` 返回完整 JSON，`stream=true` 返回 SSE 流式 |
+| `/rag/stats` | GET | Bearer JWT | 模块统计（文档/分块/索引大小/LLM 状态/是否降级） |
+| `/rag/admin/docs` | GET | Bearer JWT (admin) | 管理员全量文档列表 |
+
+**核心设计：**
+- **三层解耦**：`EmbeddingService`（embedding 门面，自动降级伪向量）→ `VectorStore` 抽象 + `InMemoryVectorStore`（纯 Python 余弦相似度，万级 chunk 以内）→ `RagService`（编排：分块 → 入库 → 检索 → 拼装 prompt → LLM 调用）
+- **可扩展点**：`VectorStore` 是抽象基类，生产替换为 Milvus / PGVector / FAISS 只需实现 `add/delete/search` 四个方法；`RagServiceConfig` 支持在 `[myproject.rag]` 配 chunk 大小、top-k、embedding/chat 模型选择
+- **SSE 流式输出**：`POST /rag/chat` 传 `"stream": true` 时，事件流会依次发出 `retrieval`（检索命中）→ 多个 `delta`（LLM 文本增量）→ `done`（结束元数据）→ 异常时发 `error`
+- **权限隔离**：普通用户只能检索自己的文档；admin 可跨用户检索
+- **启动预热**：lifespan 启动时从 MySQL 加载所有 chunk 重建内存索引（失败降级不影响服务启动）
+- **优雅降级**：未配置任何 LLM provider 时，`/rag/search` 仍可用伪向量工作；`/rag/chat` 返回 503（与 `/llm/chat` 保持一致）
+
+**快速试用：**
+
+```shell
+# 1. 登录（复用用户体系）
+TOKEN=$(curl -s -X POST http://localhost:8080/api/sample/user/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"alice","password":"mysecret123"}' | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+
+# 2. 上传文档（自动分块+向量化）
+curl -X POST http://localhost:8080/api/sample/rag/docs \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Python入门","content":"Python 是一种高级编程语言...","source":"demo"}'
+
+# 3. 向量检索（无 LLM 也能跑，伪向量模式可用）
+curl -X POST http://localhost:8080/api/sample/rag/search \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"什么是 Python","top_k":3}'
+
+# 4. 知识库问答（需先在 [myproject.llm.providers] 配置 provider）
+curl -X POST http://localhost:8080/api/sample/rag/chat \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"什么是 Python","stream":false}'
+
+# 5. 流式问答（SSE）
+curl -N -X POST http://localhost:8080/api/sample/rag/chat \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Accept: text/event-stream" \
+  -d '{"query":"什么是 Python","stream":true}'
+```
+
+配置项见 `pyproject.toml [myproject.rag]`（chunk_size / chunk_overlap / default_top_k / embedding & chat 模型等）。
+
 ## 3 数据库迁移
 
 数据库迁移使用 `aerich` 库（`pip install -e ".[dev]"` 已包含）。
@@ -351,7 +413,7 @@ docker run -p 8080:8080 fastapi-ai-starter:latest
 
 推送到 main 或提交 PR 时，[GitHub Actions](./.github/workflows/ci.yml) 自动执行：
 - **lint**：ruff 全量检查
-- **test**：74 项单元测试回归（用户体系 / 资源 CRUD / LLM 网关 / MCP / SSE / 可观测性 / 安全限流 / Kafka / 任务调度）
+- **test**：80 项单元测试回归（用户体系 / 资源 CRUD / RAG 知识库 / LLM 网关 / MCP / SSE / 可观测性 / 安全限流 / Kafka / 任务调度）
 
 ### 4.4 预编译发布（可选）
 
@@ -373,9 +435,9 @@ docker build -t [tag] -f ./docker/build_dockerfile .   # 打包编译产物为�
 - [x] **v2.0** — 升级 Python 3.12，全栈依赖主版本，LLM 网关 + MCP + SSE 流式
 - [x] 用户体系（注册/登录/JWT/角色）
 - [x] 资源 CRUD 模板（分页/权限隔离/管理员查询）
+- [x] RAG 知识库示例（向量检索 + LLM 问答）
 - [ ] 文件上传 / 对象存储模板
 - [ ] WebSocket 实时通信示例
-- [ ] RAG 知识库示例（向量检索 + LLM 问答）
 - [ ] Agent 编排模板（LangGraph 集成）
 - [ ] 管理后台（React Admin 开箱版）
 

@@ -188,6 +188,28 @@ LLM_CONFIG = LLMConfig(
     enable_cost_tracking=_llm_raw.get("enable_cost_tracking", True),
 )
 
+# RAG 配置
+class _RagConfig(BaseModel):
+    chunk_size: int = 500
+    chunk_overlap: int = 80
+    default_top_k: int = 4
+    max_top_k: int = 10
+    score_threshold: float = 0.0
+    embedding_provider: str = ""
+    embedding_model: str = ""
+    chat_provider: str = ""
+    chat_model: str = ""
+    chat_temperature: float = 0.3
+    chat_max_tokens: int | None = None
+
+
+_rag_raw = _PROJECT_CONFIG.get("rag", {})
+RAG_CONFIG = _RagConfig(**_rag_raw).model_dump()
+# 空字符串转 None（方便在 service 中透传给 LLM gateway 走默认）
+for _k in ("embedding_provider", "embedding_model", "chat_provider", "chat_model"):
+    if not RAG_CONFIG.get(_k):
+        RAG_CONFIG[_k] = None
+
 # 项目级配置（兼容老代码）
 PROJECT_CONFIG = _PROJECT_CONFIG
 
@@ -245,6 +267,10 @@ DATABASE_CONFIG: dict = {
         },
         "resource": {
             "models": ["src.faster.routers.resource.models"],
+            "default_connection": "default",
+        },
+        "rag": {
+            "models": ["src.faster.routers.rag.models"],
             "default_connection": "default",
         },
     },
