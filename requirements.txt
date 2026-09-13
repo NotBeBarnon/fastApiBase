@@ -22,7 +22,7 @@ pydantic>=2.9.0
 pydantic-settings>=2.5.2
 
 # ORM (asyncmy 替代 aiomysql, 3.12 友好)
-tortoise-orm[asyncmy]>=0.21.7
+tortoise-orm[asyncmy]>=0.21.7,<1.0
 
 # HTTP -----------------------------
 httpx>=0.27.2

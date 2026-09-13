@@ -26,7 +26,7 @@ dependencies = [
     "pydantic-settings>=2.5.2",
 
     # ORM (asyncmy 是 3.12 下 aiomysql 的替代，有 wheel)
-    "tortoise-orm[asyncmy]>=0.21.7",
+    "tortoise-orm[asyncmy]>=0.21.7,<1.0",
 
     # HTTP 客户端
     "httpx>=0.27.2",
@@ -87,7 +87,7 @@ maxsize = 26
 
 [myproject.redis]
 retry_interval = 10
-host = "124.223.5.168"
+host = "127.0.0.1"
 port = 6379
 db = 0
 user = ""
@@ -99,7 +99,7 @@ max_connections = 10
 socket_timeout = 1
 
 [myproject.redis.sentinels]
-service = [["124.223.5.168", 6379], ]
+service = [["127.0.0.1", 6379], ]
 service_name = "mymaster"
 
 [myproject.mq]

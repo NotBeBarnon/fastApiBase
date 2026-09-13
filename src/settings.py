@@ -117,12 +117,15 @@ class AppSettings(BaseSettings):
     FS_REDIS_SENTINEL_SERVICE_NAME: str | None = None
     FS_KAFKA_SERVICE: str | None = None
     FS_KAFKA_ENABLED: bool | None = None
+    FS_AUTO_SCHEMA: bool | None = None
 
 
 settings = AppSettings()
 
 DEV = settings.DEV
 PROD = settings.PROD
+# 表结构自动同步开关：默认跟随 DEV，容器部署可用 FS_AUTO_SCHEMA 显式开启
+AUTO_SCHEMA = settings.DEV if settings.FS_AUTO_SCHEMA is None else settings.FS_AUTO_SCHEMA
 HTTP_API_LISTEN_HOST = settings.HTTP_API_LISTEN_HOST
 HTTP_API_LISTEN_PORT = settings.HTTP_API_LISTEN_PORT
 HTTP_BASE_URL = settings.HTTP_BASE_URL

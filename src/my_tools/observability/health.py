@@ -57,7 +57,7 @@ async def check_database(timeout: float = 3.0) -> ComponentHealth:
     start = time.perf_counter()
     try:
         async with asyncio.timeout(timeout):
-            conn = await Tortoise.get_connection("default")
+            conn = Tortoise.get_connection("default")
             await conn.execute_query("SELECT 1")
         latency = (time.perf_counter() - start) * 1000
         return ComponentHealth("database", STATUS_UP, latency, "SELECT 1 ok")

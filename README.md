@@ -52,7 +52,7 @@
 | 🌊 **SSE 流式响应** | SSEStream（队列 / 生成器模式）、LLMStreamer（OpenAI 兼容流式输出） | `GET /sse/chat` |
 | 📨 **Kafka 消息链路** | 自动重连 + 自动建 topic 的 producer/consumer、EventPublisher 事件发布封装、回调式后台消费 worker | `POST /kafka/publish`、`GET /kafka/status` |
 | ⏰ **后台任务调度** | TaskManager 注册中心（interval/cron）、手动触发 + 状态跟踪、SSE 实时进度订阅、暂停/恢复 | `GET /tasks`、`POST /tasks/{name}/trigger` |
-| 📊 **可观测性** | DB / Redis / Kafka / LLM 四类健康探针、Prometheus 指标（P50-P99 延迟 / Token / 成本）、trace_id 结构化追踪 | `/monitor/healthz`、`/readyz`、`/metrics` |
+| 📊 **可观测性** | DB / Redis / Kafka / LLM 四类健康探针、Prometheus 指标（P50-P99 延迟 / Token / 成本）、trace_id 结构化追踪 | `/monitor/healthz`、`/monitor/readyz`、`/monitor/metrics` |
 | 🔐 **安全与限流** | 零依赖 HS256 JWT、API Key 鉴权（角色校验）、Redis Lua 滑动窗口限流（内存兜底）、请求 ID 链路 | `POST /security/token`、`GET /security/limited` |
 | 👤 **用户体系** | PBKDF2-SHA256 密码哈希、注册/登录/改密、JWT Bearer 鉴权、admin/user 角色控制、DB 不可用优雅降级 | `POST /user/register`、`POST /user/login`、`GET /user/me`、`GET /user/list` |
 | 📦 **资源 CRUD** | 统一分页/过滤/排序规范、owner 权限隔离（越权 404 防枚举）、管理员全量查询、部分更新、DB 降级 | `GET/POST/PUT/DELETE /resource/beams`、`GET /resource/admin/beams` |
@@ -78,9 +78,11 @@ docker compose up -d
 | 📋 **Redoc 文档** | `http://localhost:8080/api/sample/redoc` |
 | ❤️ 存活检查 | `http://localhost:8080/api/sample/monitor/healthz` |
 | ✅ 就绪探针（各组件状态） | `http://localhost:8080/api/sample/monitor/readyz` |
-| 📊 Prometheus 指标 | `http://localhost:8080/api/sample/metrics` |
+| 📊 Prometheus 指标 | `http://localhost:8080/api/sample/monitor/metrics` |
 
 > 想加 Kafka？`docker compose --profile full up -d` 即可。
+>
+> 首次启动会自动建表（compose 已开启 `FS_AUTO_SCHEMA=true`，safe 模式不破坏已有数据），注册登录可直接体验。
 
 ### 💻 本地开发
 
@@ -194,6 +196,8 @@ Kafka 链路默认关闭，启用方式（二选一）：`[myproject.mq] enabled
 - **字段零泄露**：所有对外响应模型均不包含 `password_hash` 字段
 
 **快速试用：**
+
+> 以下为 bash 语法，Windows 用户请使用 Git Bash / WSL 执行，或在 Swagger 文档页直接点击调试。
 
 ```shell
 # 注册

@@ -10,7 +10,7 @@ from loguru import logger
 from tortoise import Tortoise
 
 from ..my_tools.redis_tools.clients import RedisClient, RedisSentinelClient
-from ..settings import DATABASE_CONFIG, DEV, MQ_CONFIG, REDIS_CONFIG
+from ..settings import AUTO_SCHEMA, DATABASE_CONFIG, MQ_CONFIG, REDIS_CONFIG
 
 __all__ = ("lifespan",)
 
@@ -25,8 +25,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if DATABASE_CONFIG["apps"]:
         try:
             await Tortoise.init(config=DATABASE_CONFIG)
-            if DEV:
-                # 开发模式自动同步表结构（不破坏已有表）
+            if AUTO_SCHEMA:
+                # 自动同步表结构（safe 模式不破坏已有表；默认跟随 DEV，容器可设 FS_AUTO_SCHEMA=true）
                 await Tortoise.generate_schemas(safe=True)
             logger.info(f"Tortoise-ORM started: {list(Tortoise.apps)}")
         except Exception as exc:
