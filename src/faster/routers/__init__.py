@@ -6,6 +6,7 @@ from loguru import logger
 from pydantic import BaseModel
 
 from ...settings import HTTP_BASE_URL
+from .admin import admin_router
 from .kafka import kafka_router
 from .llm import llm_router
 from .mcp import mcp_router
@@ -27,6 +28,7 @@ all_router.include_router(sse_router)
 all_router.include_router(llm_router)
 all_router.include_router(rag_router)
 all_router.include_router(monitor_router)
+all_router.include_router(admin_router)
 all_router.include_router(security_router)
 all_router.include_router(kafka_router)
 all_router.include_router(tasks_router)

@@ -148,3 +148,14 @@ promotion/
 promotion-*.md
 promotion-wechat.html
 
+### Admin frontend (React + Vite)
+admin/node_modules/
+admin/.vite/
+admin/tsconfig.tsbuildinfo
+admin/tsconfig.node.tsbuildinfo
+admin/vite.config.d.ts
+admin/vite.config.js
+# 放行前端构建产物（FastAPI 直接托管 admin/dist）
+!admin/dist/
+!admin/dist/**
+
